@@ -1,0 +1,144 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * SwooleFabric CLI entry point.
+ *
+ * Usage:
+ *   php bin/swoolefabric serve      — Start HTTP + WS server
+ *   php bin/swoolefabric worker     — Start queue consumers
+ *   php bin/swoolefabric scheduler  — Start scheduler
+ */
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use SwooleFabric\Kernel\Application;
+use SwooleFabric\Kernel\Config;
+use SwooleFabric\Storage\DbManager;
+use SwooleFabric\Queue\Consumer;
+use SwooleFabric\Queue\IdempotencyStore;
+use SwooleFabric\Queue\Scheduler;
+use SwooleFabric\Events\EventConsumer;
+
+$command = $argv[1] ?? 'help';
+$configPath = $argv[2] ?? __DIR__ . '/../config/default.php';
+
+switch ($command) {
+    case 'serve':
+        echo "╔══════════════════════════════════════╗\n";
+        echo "║       SwooleFabric — Fabrq           ║\n";
+        echo "║   Unified Swoole Runtime Platform    ║\n";
+        echo "╚══════════════════════════════════════╝\n\n";
+
+        $app = new Application($configPath);
+
+        // Allow apps to register routes/services via a bootstrap file
+        $bootstrapFile = dirname($configPath) . '/bootstrap.php';
+        if (is_file($bootstrapFile)) {
+            (require $bootstrapFile)($app);
+        }
+
+        $app->run();
+        break;
+
+    case 'worker':
+        echo "╔══════════════════════════════════════╗\n";
+        echo "║       SwooleFabric — Fabrq           ║\n";
+        echo "║         Queue Worker                 ║\n";
+        echo "╚══════════════════════════════════════╝\n\n";
+
+        $config = Config::fromFile($configPath);
+        $dbManager = new DbManager();
+
+        // Boot must happen inside a coroutine context for Swoole
+        \Swoole\Coroutine\run(function () use ($config, $dbManager, $configPath) {
+            $dbManager->boot($config);
+
+            $idempotencyStore = new IdempotencyStore($dbManager);
+            $consumer = new Consumer(
+                db: $dbManager,
+                idempotencyStore: $idempotencyStore,
+                consumerGroup: $config->get('queue.consumer_group', 'sf_workers'),
+                maxAttempts: (int) $config->get('queue.retry.max_attempts', 3),
+                backoff: $config->get('queue.retry.backoff', [1, 5, 30]),
+            );
+
+            // Load app-level job handlers via bootstrap
+            $configDir = dirname($configPath);
+            $workerBootstrap = $configDir . '/worker_bootstrap.php';
+            if (is_file($workerBootstrap)) {
+                (require $workerBootstrap)($consumer, $dbManager);
+            }
+
+            // Also start event consumers
+            $eventConsumer = new EventConsumer(
+                db: $dbManager,
+                consumerGroup: $config->get('events.consumer_group', 'sf_consumers'),
+            );
+
+            $eventBootstrap = $configDir . '/event_bootstrap.php';
+            if (is_file($eventBootstrap)) {
+                (require $eventBootstrap)($eventConsumer, $dbManager);
+            }
+
+            echo "[SwooleFabric] Worker starting on queue 'default'...\n";
+
+            // Run event consumer in parallel coroutine
+            \Swoole\Coroutine::create(function () use ($eventConsumer) {
+                $eventConsumer->consume();
+            });
+
+            // Run queue consumer (blocks)
+            $consumer->consume('default');
+        });
+        break;
+
+    case 'scheduler':
+        echo "╔══════════════════════════════════════╗\n";
+        echo "║       SwooleFabric — Fabrq           ║\n";
+        echo "║          Scheduler                   ║\n";
+        echo "╚══════════════════════════════════════╝\n\n";
+
+        $config = Config::fromFile($configPath);
+        $dbManager = new DbManager();
+
+        \Swoole\Coroutine\run(function () use ($config, $dbManager, $configPath) {
+            $dbManager->boot($config);
+
+            $scheduler = new Scheduler(
+                db: $dbManager,
+                pollInterval: 1.0,
+            );
+
+            // Load scheduled jobs via bootstrap
+            $schedBootstrap = dirname($configPath) . '/scheduler_bootstrap.php';
+            if (is_file($schedBootstrap)) {
+                (require $schedBootstrap)($scheduler, $dbManager);
+            }
+
+            echo "[SwooleFabric] Scheduler started (polling every 1s)...\n";
+            $scheduler->start();
+
+            // Keep the coroutine alive
+            while (true) {
+                \Swoole\Coroutine::sleep(60.0);
+            }
+        });
+        break;
+
+    case 'help':
+    default:
+        echo "SwooleFabric CLI\n\n";
+        echo "Usage:\n";
+        echo "  php bin/swoolefabric <command> [config-path]\n\n";
+        echo "Commands:\n";
+        echo "  serve       Start HTTP + WebSocket server\n";
+        echo "  worker      Start queue consumer workers\n";
+        echo "  scheduler   Start cron-like scheduler\n";
+        echo "  help        Show this help message\n\n";
+        echo "Examples:\n";
+        echo "  php bin/swoolefabric serve\n";
+        echo "  php bin/swoolefabric serve config/production.php\n";
+        break;
+}

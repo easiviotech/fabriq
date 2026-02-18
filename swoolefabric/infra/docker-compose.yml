@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    container_name: swoolefabric-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ..:/app
+    working_dir: /app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - SWOOLE_FABRIC_ENV=local
+    command: ["php", "bin/swoolefabric", "serve"]
+    networks:
+      - sf-net
+
+  mysql:
+    image: mysql:8.0
+    container_name: swoolefabric-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_USER: swoolefabric
+      MYSQL_PASSWORD: sfpass
+      MYSQL_DATABASE: sf_platform
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - sf-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: swoolefabric-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - sf-net
+
+  adminer:
+    image: adminer
+    container_name: swoolefabric-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+    networks:
+      - sf-net
+
+volumes:
+  mysql-data:
+
+networks:
+  sf-net:
+    driver: bridge
