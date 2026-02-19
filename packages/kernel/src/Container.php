@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Kernel;
+namespace Fabriq\Kernel;
 
 use Closure;
 use RuntimeException;

@@ -1,12 +1,14 @@
-# SwooleFabric — System Architecture
+# Fabriq — System Architecture
 
 ## Overview
 
-SwooleFabric is a unified Swoole runtime that consolidates:
+Fabriq is a unified Swoole runtime that consolidates:
 - **HTTP API server** (REST endpoints)
 - **WebSocket gateway** (realtime push/presence)
 - **Queue workers** (Redis Streams)
 - **Event consumers** (publish/subscribe with dedupe)
+- **Live streaming** (WebRTC signaling, FFmpeg RTMP→HLS transcoding, viewer tracking, chat moderation)
+- **Game server** (fixed tick-rate game loop, UDP protocol with MessagePack, Redis ZSET matchmaking, lobbies, delta state sync)
 
 into a single deployable process.
 
@@ -17,11 +19,18 @@ graph TD
     subgraph "Swoole Server"
         HTTP["HTTP Handler"] --> MW["Middleware Chain"]
         WS["WS Handler"] --> GW["Gateway"]
+        UDP["UDP Handler"] --> UdpProto["UdpProtocol"]
         MW --> Router["Router"]
         Router --> Handlers["Route Handlers"]
         Handlers --> DB["DbManager"]
         Handlers --> EventBus["EventBus"]
         Handlers --> Push["PushService"]
+        Signaling["SignalingHandler"] --> Push
+        Transcode["TranscodingPipeline"] --> FFmpeg["FFmpeg Process"]
+        HLS["HlsManager"] --> Router
+        GameLoop["GameLoop"] --> GameRooms["GameRoom(s)"]
+        UdpProto --> GameRooms
+        Matchmaker["Matchmaker"]
     end
 
     subgraph "Workers"
@@ -42,6 +51,8 @@ graph TD
     Consumer --> Redis
     EventConsumer --> Redis
     Scheduler --> Redis
+    Matchmaker --> Redis
+    Signaling --> Redis
 ```
 
 ## Data Flow: Send Message
@@ -66,6 +77,8 @@ Every execution path requires TenantContext:
 | WebSocket | WsAuthHandler (JWT token) |
 | Queue Job | Context restored from job fields |
 | Event Consumer | Context restored from event fields |
+| Live Streaming | StreamManager carries `tenant_id`; signaling/chat messages are tenant-scoped |
+| Game Server | GameRoom and Matchmaker carry `tenant_id`; UDP packets include room context |
 
 ## Long-Running Safety
 

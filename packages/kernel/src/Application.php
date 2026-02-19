@@ -2,35 +2,65 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Kernel;
+namespace Fabriq\Kernel;
 
 use Swoole\Http\Request;
 use Swoole\Http\Response;
-use SwooleFabric\Observability\MetricsCollector;
-use SwooleFabric\Observability\Logger;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Observability\MetricsCollector;
+use Fabriq\Observability\Logger;
+use Fabriq\Storage\DbManager;
 
 /**
- * Application bootstrap.
+ * Application bootstrap — the heart of Fabriq.
  *
- * Loads config, builds the DI container, wires the HTTP server,
- * and registers the default /health and /metrics endpoints.
+ * Application lifecycle:
+ *   1. Instantiate with a base path
+ *   2. Config is loaded from the config/ directory
+ *   3. Service providers are registered (bindings)
+ *   4. Service providers are booted (cross-service wiring)
+ *   5. Server starts
+ *
+ * The two-phase provider lifecycle (register → boot) ensures that
+ * providers can safely resolve each other's bindings during boot().
  */
 final class Application
 {
+    private string $basePath;
     private Config $config;
     private Container $container;
     private Server $server;
 
+    /** @var list<ServiceProvider> */
+    private array $providers = [];
+
+    /** @var bool Whether providers have been booted */
+    private bool $booted = false;
+
     /** @var list<callable(Request, Response): bool> Route handlers; return true if handled */
     private array $routes = [];
 
-    public function __construct(string $configPath)
+    /**
+     * Create a new application instance.
+     *
+     * @param string $basePath Root directory of the project (contains config/, routes/, app/, etc.)
+     */
+    public function __construct(string $basePath)
     {
-        $this->config = Config::fromFile($configPath);
+        $this->basePath = rtrim($basePath, '/\\');
+
+        // Load configuration from the config/ directory
+        $configDir = $this->configPath();
+        if (is_dir($configDir)) {
+            $this->config = Config::fromDirectory($configDir);
+        } else {
+            $this->config = new Config();
+        }
+
         $this->container = new Container();
         $this->server = new Server($this->config);
 
+        // Register core instances
+        $this->container->instance(self::class, $this);
         $this->container->instance(Config::class, $this->config);
         $this->container->instance(Container::class, $this->container);
         $this->container->instance(Server::class, $this->server);
@@ -63,6 +93,58 @@ final class Application
         $this->wireRequestHandler($metrics);
     }
 
+    // ── Path Helpers ────────────────────────────────────────────────
+
+    /**
+     * Get the base path of the application.
+     */
+    public function basePath(string $path = ''): string
+    {
+        return $this->basePath . ($path !== '' ? DIRECTORY_SEPARATOR . ltrim($path, '/\\') : '');
+    }
+
+    /**
+     * Get the path to the config/ directory.
+     */
+    public function configPath(string $path = ''): string
+    {
+        return $this->basePath('config') . ($path !== '' ? DIRECTORY_SEPARATOR . ltrim($path, '/\\') : '');
+    }
+
+    /**
+     * Get the path to the routes/ directory.
+     */
+    public function routesPath(string $path = ''): string
+    {
+        return $this->basePath('routes') . ($path !== '' ? DIRECTORY_SEPARATOR . ltrim($path, '/\\') : '');
+    }
+
+    /**
+     * Get the path to the app/ directory.
+     */
+    public function appPath(string $path = ''): string
+    {
+        return $this->basePath('app') . ($path !== '' ? DIRECTORY_SEPARATOR . ltrim($path, '/\\') : '');
+    }
+
+    /**
+     * Get the path to the database/ directory.
+     */
+    public function databasePath(string $path = ''): string
+    {
+        return $this->basePath('database') . ($path !== '' ? DIRECTORY_SEPARATOR . ltrim($path, '/\\') : '');
+    }
+
+    /**
+     * Get the path to the bootstrap/ directory.
+     */
+    public function bootstrapPath(string $path = ''): string
+    {
+        return $this->basePath('bootstrap') . ($path !== '' ? DIRECTORY_SEPARATOR . ltrim($path, '/\\') : '');
+    }
+
+    // ── Accessors ────────────────────────────────────────────────────
+
     public function config(): Config
     {
         return $this->config;
@@ -78,6 +160,74 @@ final class Application
         return $this->server;
     }
 
+    // ── Service Provider Lifecycle ───────────────────────────────────
+
+    /**
+     * Register a service provider.
+     *
+     * Accepts either a ServiceProvider instance or a class name string.
+     *
+     * @param ServiceProvider|class-string<ServiceProvider> $provider
+     */
+    public function register(ServiceProvider|string $provider): ServiceProvider
+    {
+        if (is_string($provider)) {
+            $provider = new $provider($this);
+        }
+
+        $provider->register();
+        $this->providers[] = $provider;
+
+        // If already booted, boot this provider immediately
+        if ($this->booted) {
+            $provider->boot();
+        }
+
+        return $provider;
+    }
+
+    /**
+     * Boot all registered providers.
+     *
+     * Called once after all providers have been registered.
+     * Each provider's boot() method can safely resolve any service.
+     */
+    public function boot(): void
+    {
+        if ($this->booted) {
+            return;
+        }
+
+        foreach ($this->providers as $provider) {
+            $provider->boot();
+        }
+
+        $this->booted = true;
+    }
+
+    /**
+     * Register all providers listed in config('app.providers').
+     *
+     * This is the conventional way to register providers — list them
+     * in config/app.php under the 'providers' key.
+     */
+    public function registerConfiguredProviders(): void
+    {
+        $providers = $this->config->get('app.providers', []);
+
+        if (!is_array($providers)) {
+            return;
+        }
+
+        foreach ($providers as $providerClass) {
+            if (is_string($providerClass) && class_exists($providerClass)) {
+                $this->register($providerClass);
+            }
+        }
+    }
+
+    // ── Route Registration ──────────────────────────────────────────
+
     /**
      * Register a route handler.
      *
@@ -88,6 +238,8 @@ final class Application
         $this->routes[] = $handler;
     }
 
+    // ── Worker Start Hooks ──────────────────────────────────────────
+
     /**
      * Register a callback to run in onWorkerStart.
      *
@@ -97,6 +249,8 @@ final class Application
     {
         $this->server->addWorkerStartCallback($callback);
     }
+
+    // ── Run ─────────────────────────────────────────────────────────
 
     /**
      * Start the Swoole server (blocking).
@@ -118,6 +272,18 @@ final class Application
         $metrics->registerGauge('queue_lag', 'Queue processing lag');
         $metrics->registerGauge('db_pool_in_use', 'DB pool connections in use');
         $metrics->registerCounter('db_pool_waits', 'DB pool borrow wait count');
+
+        // Streaming metrics
+        $metrics->registerGauge('streams_active', 'Currently live streams');
+        $metrics->registerGauge('stream_viewers_current', 'Total concurrent viewers');
+        $metrics->registerGauge('stream_transcodes_active', 'Active FFmpeg processes');
+
+        // Gaming metrics
+        $metrics->registerGauge('game_rooms_active', 'Active game rooms');
+        $metrics->registerGauge('game_players_connected', 'Connected game players');
+        $metrics->registerHistogram('game_tick_latency_ms', 'Game loop tick timing');
+        $metrics->registerCounter('udp_packets_total', 'UDP packets processed');
+        $metrics->registerGauge('matchmaking_queue_size', 'Players waiting for match');
     }
 
     private function registerDefaultRoutes(MetricsCollector $metrics): void
@@ -131,7 +297,7 @@ final class Application
                 $response->header('Content-Type', 'application/json');
                 $response->end(json_encode([
                     'status' => 'ok',
-                    'service' => 'swoolefabric',
+                    'service' => 'Fabriq',
                     'timestamp' => time(),
                     'request_id' => Context::requestId(),
                 ], JSON_THROW_ON_ERROR));

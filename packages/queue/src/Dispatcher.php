@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Queue;
+namespace Fabriq\Queue;
 
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Kernel\Context;
+use Fabriq\Storage\DbManager;
 
 /**
  * Job dispatcher — publishes jobs to Redis Streams.

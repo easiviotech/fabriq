@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Queue;
+namespace Fabriq\Queue;
 
 use Swoole\Coroutine;
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Kernel\Context;
+use Fabriq\Storage\DbManager;
 
 /**
  * Queue consumer — reads jobs from Redis Streams.
@@ -98,7 +98,7 @@ final class Consumer
                 }
             } catch (\Throwable $e) {
                 // Log error and continue
-                error_log("[SwooleFabric][Consumer] Error: {$e->getMessage()}");
+                error_log("[Fabriq][Consumer] Error: {$e->getMessage()}");
                 Coroutine::sleep(1.0);
             }
         }
@@ -150,7 +150,7 @@ final class Consumer
         // Find handler
         $handler = $this->handlers[$jobType] ?? null;
         if ($handler === null) {
-            error_log("[SwooleFabric][Consumer] No handler for job type: {$jobType}");
+            error_log("[Fabriq][Consumer] No handler for job type: {$jobType}");
             $this->ack($streamKey, $messageId);
             return;
         }
@@ -176,7 +176,7 @@ final class Consumer
             } else {
                 // Retry with backoff
                 $backoffSeconds = $this->backoff[$attempts - 1] ?? end($this->backoff);
-                error_log("[SwooleFabric][Consumer] Retrying {$jobType} (attempt {$attempts}) in {$backoffSeconds}s: {$e->getMessage()}");
+                error_log("[Fabriq][Consumer] Retrying {$jobType} (attempt {$attempts}) in {$backoffSeconds}s: {$e->getMessage()}");
 
                 // Re-dispatch with incremented attempts
                 Coroutine::sleep((float) $backoffSeconds);

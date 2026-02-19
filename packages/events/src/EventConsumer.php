@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Events;
+namespace Fabriq\Events;
 
 use Swoole\Coroutine;
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Kernel\Context;
+use Fabriq\Storage\DbManager;
 
 /**
  * Event consumer — reads events from Redis Streams with deduplication.
@@ -97,7 +97,7 @@ final class EventConsumer
                     }
                 }
             } catch (\Throwable $e) {
-                error_log("[SwooleFabric][EventConsumer] Error: {$e->getMessage()}");
+                error_log("[Fabriq][EventConsumer] Error: {$e->getMessage()}");
                 Coroutine::sleep(1.0);
             }
         }
@@ -156,7 +156,7 @@ final class EventConsumer
                 $this->markProcessed($event->dedupeKey, $consumerName);
             }
         } catch (\Throwable $e) {
-            error_log("[SwooleFabric][EventConsumer] Handler error for {$eventType}: {$e->getMessage()}");
+            error_log("[Fabriq][EventConsumer] Handler error for {$eventType}: {$e->getMessage()}");
         }
 
         $this->ack($streamKey, $messageId);

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Kernel;
+namespace Fabriq\Kernel;
 
 /**
  * Immutable, array-based configuration.
@@ -35,6 +35,44 @@ final class Config
         $data = require $path;
 
         return new self(is_array($data) ? $data : []);
+    }
+
+    /**
+     * Load config from a directory of PHP files.
+     *
+     * Each file becomes a top-level key. For example:
+     *   config/database.php  →  $config->get('database.platform.host')
+     *   config/server.php    →  $config->get('server.host')
+     *
+     * @param string $directory Path to config directory
+     */
+    public static function fromDirectory(string $directory): self
+    {
+        $directory = rtrim($directory, '/\\');
+
+        if (!is_dir($directory)) {
+            return new self();
+        }
+
+        $items = [];
+        $files = glob($directory . DIRECTORY_SEPARATOR . '*.php');
+
+        if ($files === false) {
+            return new self();
+        }
+
+        foreach ($files as $file) {
+            $key = basename($file, '.php');
+
+            /** @var mixed $data */
+            $data = require $file;
+
+            if (is_array($data)) {
+                $items[$key] = $data;
+            }
+        }
+
+        return new self($items);
     }
 
     /**

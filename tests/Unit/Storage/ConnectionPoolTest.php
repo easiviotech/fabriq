@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Tests\Unit\Storage;
+namespace Fabriq\Tests\Unit\Storage;
 
 use PHPUnit\Framework\TestCase;
-use SwooleFabric\Storage\ConnectionPool;
+use Fabriq\Storage\ConnectionPool;
 use RuntimeException;
 
 /**

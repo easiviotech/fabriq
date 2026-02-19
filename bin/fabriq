@@ -3,56 +3,53 @@
 declare(strict_types=1);
 
 /**
- * SwooleFabric CLI entry point.
+ * Fabriq CLI Entry Point
  *
  * Usage:
- *   php bin/swoolefabric serve      — Start HTTP + WS server
- *   php bin/swoolefabric worker     — Start queue consumers
- *   php bin/swoolefabric scheduler  — Start scheduler
+ *   php bin/fabriq serve       — Start HTTP + WS server
+ *   php bin/fabriq worker      — Start queue consumers
+ *   php bin/fabriq scheduler   — Start scheduler
+ *
+ * All commands load the application via bootstrap/app.php,
+ * which registers service providers from config/app.php.
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use SwooleFabric\Kernel\Application;
-use SwooleFabric\Kernel\Config;
-use SwooleFabric\Storage\DbManager;
-use SwooleFabric\Queue\Consumer;
-use SwooleFabric\Queue\IdempotencyStore;
-use SwooleFabric\Queue\Scheduler;
-use SwooleFabric\Events\EventConsumer;
+use Fabriq\Kernel\Application;
+use Fabriq\Kernel\Config;
+use Fabriq\Storage\DbManager;
+use Fabriq\Queue\Consumer;
+use Fabriq\Queue\IdempotencyStore;
+use Fabriq\Queue\Scheduler;
+use Fabriq\Events\EventConsumer;
 
 $command = $argv[1] ?? 'help';
-$configPath = $argv[2] ?? __DIR__ . '/../config/default.php';
 
 switch ($command) {
     case 'serve':
         echo "╔══════════════════════════════════════╗\n";
-        echo "║       SwooleFabric — Fabrq           ║\n";
+        echo "║              Fabriq                  ║\n";
         echo "║   Unified Swoole Runtime Platform    ║\n";
         echo "╚══════════════════════════════════════╝\n\n";
 
-        $app = new Application($configPath);
-
-        // Allow apps to register routes/services via a bootstrap file
-        $bootstrapFile = dirname($configPath) . '/bootstrap.php';
-        if (is_file($bootstrapFile)) {
-            (require $bootstrapFile)($app);
-        }
-
+        /** @var Application $app */
+        $app = require __DIR__ . '/../bootstrap/app.php';
         $app->run();
         break;
 
     case 'worker':
         echo "╔══════════════════════════════════════╗\n";
-        echo "║       SwooleFabric — Fabrq           ║\n";
-        echo "║         Queue Worker                 ║\n";
+        echo "║              Fabriq                  ║\n";
+        echo "║           Queue Worker               ║\n";
         echo "╚══════════════════════════════════════╝\n\n";
 
-        $config = Config::fromFile($configPath);
+        $basePath = dirname(__DIR__);
+        $config = Config::fromDirectory($basePath . '/config');
         $dbManager = new DbManager();
 
         // Boot must happen inside a coroutine context for Swoole
-        \Swoole\Coroutine\run(function () use ($config, $dbManager, $configPath) {
+        \Swoole\Coroutine\run(function () use ($config, $dbManager, $basePath) {
             $dbManager->boot($config);
 
             $idempotencyStore = new IdempotencyStore($dbManager);
@@ -64,9 +61,8 @@ switch ($command) {
                 backoff: $config->get('queue.retry.backoff', [1, 5, 30]),
             );
 
-            // Load app-level job handlers via bootstrap
-            $configDir = dirname($configPath);
-            $workerBootstrap = $configDir . '/worker_bootstrap.php';
+            // Load app-level job handlers via a worker bootstrap (if exists)
+            $workerBootstrap = $basePath . '/bootstrap/worker.php';
             if (is_file($workerBootstrap)) {
                 (require $workerBootstrap)($consumer, $dbManager);
             }
@@ -77,12 +73,12 @@ switch ($command) {
                 consumerGroup: $config->get('events.consumer_group', 'sf_consumers'),
             );
 
-            $eventBootstrap = $configDir . '/event_bootstrap.php';
+            $eventBootstrap = $basePath . '/bootstrap/events.php';
             if (is_file($eventBootstrap)) {
                 (require $eventBootstrap)($eventConsumer, $dbManager);
             }
 
-            echo "[SwooleFabric] Worker starting on queue 'default'...\n";
+            echo "[Fabriq] Worker starting on queue 'default'...\n";
 
             // Run event consumer in parallel coroutine
             \Swoole\Coroutine::create(function () use ($eventConsumer) {
@@ -96,14 +92,15 @@ switch ($command) {
 
     case 'scheduler':
         echo "╔══════════════════════════════════════╗\n";
-        echo "║       SwooleFabric — Fabrq           ║\n";
-        echo "║          Scheduler                   ║\n";
+        echo "║              Fabriq                  ║\n";
+        echo "║            Scheduler                 ║\n";
         echo "╚══════════════════════════════════════╝\n\n";
 
-        $config = Config::fromFile($configPath);
+        $basePath = dirname(__DIR__);
+        $config = Config::fromDirectory($basePath . '/config');
         $dbManager = new DbManager();
 
-        \Swoole\Coroutine\run(function () use ($config, $dbManager, $configPath) {
+        \Swoole\Coroutine\run(function () use ($config, $dbManager, $basePath) {
             $dbManager->boot($config);
 
             $scheduler = new Scheduler(
@@ -112,12 +109,12 @@ switch ($command) {
             );
 
             // Load scheduled jobs via bootstrap
-            $schedBootstrap = dirname($configPath) . '/scheduler_bootstrap.php';
+            $schedBootstrap = $basePath . '/bootstrap/scheduler.php';
             if (is_file($schedBootstrap)) {
                 (require $schedBootstrap)($scheduler, $dbManager);
             }
 
-            echo "[SwooleFabric] Scheduler started (polling every 1s)...\n";
+            echo "[Fabriq] Scheduler started (polling every 1s)...\n";
             $scheduler->start();
 
             // Keep the coroutine alive
@@ -129,16 +126,18 @@ switch ($command) {
 
     case 'help':
     default:
-        echo "SwooleFabric CLI\n\n";
+        echo "Fabriq CLI\n\n";
         echo "Usage:\n";
-        echo "  php bin/swoolefabric <command> [config-path]\n\n";
+        echo "  php bin/fabriq <command>\n\n";
         echo "Commands:\n";
         echo "  serve       Start HTTP + WebSocket server\n";
         echo "  worker      Start queue consumer workers\n";
         echo "  scheduler   Start cron-like scheduler\n";
         echo "  help        Show this help message\n\n";
         echo "Examples:\n";
-        echo "  php bin/swoolefabric serve\n";
-        echo "  php bin/swoolefabric serve config/production.php\n";
+        echo "  php bin/fabriq serve\n";
+        echo "  php bin/fabriq worker\n";
+        echo "  php bin/fabriq scheduler\n";
         break;
 }
+

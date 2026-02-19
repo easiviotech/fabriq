@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Tenancy - Fabriq Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<aside id="docs-sidebar"></aside>
+<div id="sidebar-overlay"></div>
+<header id="docs-header"></header>
+
+<div id="docs-content">
+    <div id="docs-content-inner" class="docs-content">
+
+        <h1>Multi-Tenancy</h1>
+        <p>Fabriq enforces tenant isolation at the kernel level. Every HTTP request, WebSocket message, queue job, and event carries a <code>tenant_id</code>.</p>
+
+        <!-- ── Tenant Resolution ───────────────────────────────────── -->
+        <h2 id="resolution">Tenant Resolution</h2>
+
+        <p>The <code>TenantResolver</code> tries strategies in order until one matches. If none resolves, the request is rejected with <code>403 Forbidden</code>.</p>
+
+        <table>
+            <thead>
+                <tr><th>Strategy</th><th>How It Works</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>host</code></td><td>Extracts subdomain from <code>Host</code> header (e.g., <code>acme.myapp.com</code> &rarr; slug <code>acme</code>), or matches custom domain</td></tr>
+                <tr><td><code>header</code></td><td>Reads <code>X-Tenant: acme</code> header</td></tr>
+                <tr><td><code>token</code></td><td>Reads <code>tenant_id</code> claim from a decoded JWT (requires <code>AuthMiddleware</code> to run first)</td></tr>
+            </tbody>
+        </table>
+
+        <p>The resolution priority is configured in <code>config/tenancy.php</code>:</p>
+
+        <pre><code class="language-php">'tenancy' => [
+    'resolver_chain' => ['host', 'header', 'token'],
+    'cache_ttl'      => 300,
+],</code></pre>
+
+        <pre><code class="language-text">1. Host subdomain  →  acme.fabriq.dev → "acme"
+2. X-Tenant header →  X-Tenant: acme        → "acme"
+3. JWT claim       →  { tenant_id: "acme" } → "acme"</code></pre>
+
+        <!-- ── TenantContext ───────────────────────────────────────── -->
+        <h2 id="tenant-context">TenantContext</h2>
+
+        <p>Once resolved, the tenant is available everywhere via the coroutine-local <code>Context</code>:</p>
+
+        <pre><code class="language-php">use Fabriq\Kernel\Context;
+
+$tenantId = Context::tenantId();   // UUID string
+
+// Full tenant object (stored in extras by TenancyMiddleware)
+$tenantData = Context::getExtra('tenant');
+// ['id' => '...', 'slug' => 'acme', 'name' => 'Acme Corp', 'plan' => 'pro', ...]</code></pre>
+
+        <h3>Creating a TenantContext</h3>
+
+        <pre><code class="language-php">use Fabriq\Tenancy\TenantContext;
+
+// From a database row
+$tenant = TenantContext::fromArray([
+    'id'     => 'uuid-here',
+    'slug'   => 'acme',
+    'name'   => 'Acme Corp',
+    'plan'   => 'pro',
+    'status' => 'active',
+    'domain' => 'acme.example.com',
+    'config_json' => '{"feature_flags":{"dark_mode":true}}',
+]);
+
+$tenant->id;          // 'uuid-here'
+$tenant->isActive();  // true
+$tenant->configValue('feature_flags.dark_mode'); // true</code></pre>
+
+        <h3>TenantContext Properties</h3>
+
+        <pre><code class="language-php">TenantContext {
+    id: string        // UUID or generated ID
+    slug: string      // URL-safe identifier
+    name: string      // Display name
+    plan: string      // "free", "pro", "enterprise"
+    status: string    // "active", "suspended"
+    config: array     // Tenant-specific overrides
+    dbKey: ?string    // For future shard routing
+}</code></pre>
+
+        <div class="callout warning">
+            <div class="callout-title">Important</div>
+            <p>Suspended tenants are rejected at resolution time. You do not need to check status in your application code.</p>
+        </div>
+
+        <!-- ── Enforcement ─────────────────────────────────────────── -->
+        <h2 id="enforcement">Tenant Enforcement</h2>
+
+        <p>Tenant isolation is enforced at every layer of the system:</p>
+
+        <table>
+            <thead>
+                <tr><th>Layer</th><th>How tenant_id is enforced</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>HTTP</td><td>TenancyMiddleware resolves and sets Context</td></tr>
+                <tr><td>WebSocket</td><td>WsAuthHandler resolves from JWT, registers in Gateway</td></tr>
+                <tr><td>Queue Jobs</td><td>Context restored from job fields (<code>tenant_id</code> stored at dispatch)</td></tr>
+                <tr><td>Event Consumer</td><td>Context restored from event fields</td></tr>
+                <tr><td>Repository</td><td>Base <code>TenantAwareRepository</code> adds <code>WHERE tenant_id = ?</code></td></tr>
+            </tbody>
+        </table>
+
+        <h3>Tenant-Scoped Database Queries</h3>
+
+        <p>Always include <code>tenant_id</code> in your queries. The <code>TenantAwareRepository</code> base class enforces this automatically:</p>
+
+        <pre><code class="language-php">use Fabriq\Storage\TenantAwareRepository;
+
+final class OrderRepository extends TenantAwareRepository
+{
+    public function findAll(): array
+    {
+        return $this->withAppDb(function ($conn) {
+            $tenantId = $this->tenantId(); // throws if missing
+            $stmt = $conn->prepare('SELECT * FROM orders WHERE tenant_id = ?');
+            return $stmt->execute([$tenantId]);
+        });
+    }
+}</code></pre>
+
+        <div class="callout danger">
+            <div class="callout-title">Safety</div>
+            <p>If <code>tenant_id</code> is not set in the current Context, calling <code>$this->tenantId()</code> will throw a <code>RuntimeException</code>. This fail-fast behavior prevents accidental cross-tenant data access.</p>
+        </div>
+
+        <!-- ── Config Cache ────────────────────────────────────────── -->
+        <h2 id="config-cache">Config Cache</h2>
+
+        <p>Tenant configuration is cached in-memory with a configurable TTL to avoid hitting the database on every request:</p>
+
+        <pre><code class="language-text">Key: sf:tenant:config:{slug}
+TTL: 300 seconds (5 minutes)</code></pre>
+
+        <pre><code class="language-php">$tenantCache = new TenantConfigCache(
+    ttl: (float) $config->get('tenancy.cache_ttl', 300),
+);
+
+// Store a tenant in the cache
+$tenantCache->put($tenant);
+
+// Retrieve from cache (returns null if expired)
+$cached = $tenantCache->get("host:acme");</code></pre>
+
+        <!-- Prev / Next -->
+        <div id="docs-prev-next"></div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-php.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+<script src="assets/docs.js"></script>
+</body>
+</html>
+

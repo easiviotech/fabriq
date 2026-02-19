@@ -1,4 +1,4 @@
-# SwooleFabric — Realtime Fabric
+# Fabriq — Realtime Fabric
 
 ## Architecture
 
@@ -27,6 +27,8 @@ $push->pushUser($tenantId, $userId, ['type' => 'notification', 'body' => '...'])
 $push->pushRoom($tenantId, $roomId, ['type' => 'message', 'body' => '...']);
 $push->pushTopic($tenantId, 'announcements', ['type' => 'alert', 'body' => '...']);
 ```
+
+> **Note:** The `PushService` is also used by the **Live Streaming** package (`SignalingHandler`) to relay WebRTC SDP offers/answers and ICE candidates between streamer and viewers, and by the **Game Server** package (`GameRoomManager`) for cross-worker room coordination.
 
 ## Redis Channel Naming
 

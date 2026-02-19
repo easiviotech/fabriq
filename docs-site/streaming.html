@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Streaming - Fabriq Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<aside id="docs-sidebar"></aside>
+<div id="sidebar-overlay"></div>
+<header id="docs-header"></header>
+
+<div id="docs-content">
+    <div id="docs-content-inner" class="docs-content">
+
+        <h1>Live Streaming</h1>
+        <p>Fabriq provides a complete live streaming infrastructure as a built-in package. It replaces expensive hosted signaling services (Agora, LiveKit) and media servers by running the <strong>control plane in PHP</strong> and delegating the <strong>media plane to FFmpeg</strong> &mdash; all within the same Swoole process.</p>
+
+        <div class="tip">
+            <strong>Cost Savings:</strong> By combining signaling, chat, and stream management into a single Fabriq process, you eliminate $49&ndash;$500/month in third-party signaling costs and $20&ndash;$100/month for a separate chat server.
+        </div>
+
+        <!-- ── Architecture ──────────────────────────────────────── -->
+        <h2 id="architecture">Architecture Overview</h2>
+
+        <p>The streaming package uses a hybrid approach:</p>
+
+        <table>
+            <thead>
+                <tr><th>Component</th><th>Responsibility</th><th>Runs In</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>SignalingHandler</code></td><td>WebRTC SDP/ICE exchange</td><td>Swoole WS Worker</td></tr>
+                <tr><td><code>StreamManager</code></td><td>Stream lifecycle (create, start, end)</td><td>Swoole Worker</td></tr>
+                <tr><td><code>TranscodingPipeline</code></td><td>FFmpeg process management</td><td>Child Process</td></tr>
+                <tr><td><code>HlsManager</code></td><td>HLS manifest + segment serving</td><td>Swoole HTTP Worker</td></tr>
+                <tr><td><code>ViewerTracker</code></td><td>Concurrent viewer counting</td><td>Redis</td></tr>
+                <tr><td><code>ChatModerator</code></td><td>Chat slow mode, filters, bans</td><td>Redis + Worker</td></tr>
+                <tr><td><code>StreamRepository</code></td><td>Persistent stream data</td><td>MySQL via pool</td></tr>
+            </tbody>
+        </table>
+
+        <p>For <strong>small audiences (&le;50 viewers)</strong>, WebRTC P2P is used &mdash; the media flows directly between the streamer and viewers, with Fabriq only handling the signaling. For <strong>large audiences</strong>, the <code>TranscodingPipeline</code> kicks in, using FFmpeg to produce HLS segments that can be served via CDN to thousands of viewers.</p>
+
+        <!-- ── Configuration ──────────────────────────────────────── -->
+        <h2 id="configuration">Configuration</h2>
+
+        <p>All streaming settings live in <code>config/streaming.php</code>:</p>
+
+        <pre><code class="language-php">&lt;?php
+// config/streaming.php
+return [
+    'enabled' =&gt; true,
+    'ffmpeg_path' =&gt; '/usr/bin/ffmpeg',
+
+    'hls' =&gt; [
+        'segment_duration' =&gt; 4,
+        'playlist_size' =&gt; 5,
+        'storage_path' =&gt; '/tmp/fabriq-hls',
+    ],
+
+    'stream_key_ttl' =&gt; 86400,
+    'max_concurrent_transcodes' =&gt; 4,
+
+    'chat' =&gt; [
+        'slow_mode_seconds' =&gt; 0,
+        'max_message_length' =&gt; 500,
+    ],
+];</code></pre>
+
+        <div class="tip">
+            <strong>Tip:</strong> Enable the <code>StreamingServiceProvider</code> in <code>config/app.php</code> to activate streaming features. It&rsquo;s included by default but gated by the <code>streaming.enabled</code> config flag.
+        </div>
+
+        <!-- ── Stream Lifecycle ──────────────────────────────────── -->
+        <h2 id="stream-lifecycle">Stream Lifecycle</h2>
+
+        <h3>Creating a Stream</h3>
+
+        <p>Streams are created via the REST API or directly through the <code>StreamManager</code>:</p>
+
+        <pre><code class="language-php">// Via StreamManager
+$streamManager = $container-&gt;make(StreamManager::class);
+$result = $streamManager-&gt;createStream(
+    tenantId: 'acme',
+    userId: 'user_123',
+    title: 'My Live Stream',
+);
+// Returns: ['stream_id' => 'stream_abc123', 'stream_key' => 'sk_...']</code></pre>
+
+        <p>Or via the REST API:</p>
+
+        <pre><code class="language-bash"># Create a stream
+curl -X POST http://localhost:8000/api/streams \
+  -H "Content-Type: application/json" \
+  -d '{"title": "My Live Stream"}'
+
+# Response:
+# {"stream_id": "stream_abc123", "stream_key": "sk_..."}</code></pre>
+
+        <h3>Stream States</h3>
+
+        <table>
+            <thead>
+                <tr><th>State</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>pending</code></td><td>Stream created, stream key issued, waiting for streamer to connect</td></tr>
+                <tr><td><code>live</code></td><td>Streamer is broadcasting, viewers can join</td></tr>
+                <tr><td><code>ended</code></td><td>Stream has ended, cleanup in progress</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── WebRTC Signaling ──────────────────────────────────── -->
+        <h2 id="signaling">WebRTC Signaling</h2>
+
+        <p>The <code>SignalingHandler</code> replaces hosted signaling services by handling SDP offer/answer and ICE candidate exchange over WebSocket:</p>
+
+        <h3>Signaling Flow</h3>
+        <ol>
+            <li>Streamer sends <code>offer</code> with SDP &rarr; stored by Fabriq, relayed to viewers</li>
+            <li>Viewer sends <code>answer</code> with SDP &rarr; relayed back to streamer</li>
+            <li>ICE candidates exchanged similarly in both directions</li>
+            <li>P2P media connection established &mdash; <strong>no Fabriq bandwidth used</strong></li>
+        </ol>
+
+        <h3>Signaling Messages</h3>
+
+        <pre><code class="language-json">// Streamer sends SDP offer
+{"type": "offer", "stream_id": "stream_abc", "stream_key": "sk_...", "sdp": "v=0\r\n..."}
+
+// Viewer subscribes to a stream
+{"type": "subscribe", "stream_id": "stream_abc"}
+
+// Viewer sends SDP answer
+{"type": "answer", "stream_id": "stream_abc", "sdp": "v=0\r\n..."}
+
+// ICE candidate exchange
+{"type": "candidate", "stream_id": "stream_abc", "candidate": "candidate:..."}</code></pre>
+
+        <h3>Handling Signaling in Your WS Handler</h3>
+
+        <pre><code class="language-php">use Fabriq\Streaming\SignalingHandler;
+
+// In your WebSocket message handler:
+$signaling = $container-&gt;make(SignalingHandler::class);
+$data = json_decode($frame-&gt;data, true);
+
+if (($data['type'] ?? '') === 'offer'
+    || ($data['type'] ?? '') === 'answer'
+    || ($data['type'] ?? '') === 'candidate'
+    || ($data['type'] ?? '') === 'subscribe'
+) {
+    $signaling-&gt;handle($server, $frame, $tenantId, $userId);
+}</code></pre>
+
+        <!-- ── HLS Transcoding ──────────────────────────────────── -->
+        <h2 id="transcoding">HLS Transcoding</h2>
+
+        <p>For large audiences, the <code>TranscodingPipeline</code> spawns FFmpeg processes to transcode incoming streams to HLS format:</p>
+
+        <pre><code class="language-php">use Fabriq\Streaming\TranscodingPipeline;
+
+$transcoder = $container-&gt;make(TranscodingPipeline::class);
+
+// Start transcoding (input from RTMP/WHIP ingest)
+$transcoder-&gt;start('stream_abc', 'rtmp://localhost/live/stream_abc');
+
+// Check if active
+$transcoder-&gt;isActive('stream_abc'); // true
+
+// Stop transcoding
+$transcoder-&gt;stop('stream_abc');
+
+// Clean up HLS files
+$transcoder-&gt;cleanup('stream_abc');</code></pre>
+
+        <h3>HLS Playback</h3>
+
+        <p>HLS segments are automatically served via HTTP:</p>
+
+        <pre><code class="language-bash"># Get the HLS manifest
+curl http://localhost:8000/hls/stream_abc/playlist.m3u8
+
+# Video.js or HLS.js can play this URL directly:
+# http://localhost:8000/hls/stream_abc/playlist.m3u8</code></pre>
+
+        <div class="tip">
+            <strong>CDN-Ready:</strong> HLS segments are served with appropriate <code>Cache-Control</code> headers. Manifests are <code>no-cache</code> (dynamic), while <code>.ts</code> segments are <code>immutable</code> (cacheable forever). Put a CDN in front for massive scalability.
+        </div>
+
+        <!-- ── Viewer Tracking ──────────────────────────────────── -->
+        <h2 id="viewer-tracking">Viewer Tracking</h2>
+
+        <p>The <code>ViewerTracker</code> uses Redis sorted sets with TTL-based expiry for accurate concurrent viewer counts:</p>
+
+        <pre><code class="language-php">use Fabriq\Streaming\ViewerTracker;
+
+$tracker = $container-&gt;make(ViewerTracker::class);
+
+// Heartbeat (call every 15 seconds)
+$tracker-&gt;heartbeat('acme', 'stream_abc', 'user_123');
+
+// Get viewer count
+$count = $tracker-&gt;count('acme', 'stream_abc');
+
+// Get all viewer IDs
+$viewers = $tracker-&gt;getViewers('acme', 'stream_abc');
+
+// Remove viewer on disconnect
+$tracker-&gt;remove('acme', 'stream_abc', 'user_123');</code></pre>
+
+        <!-- ── Chat Moderation ──────────────────────────────────── -->
+        <h2 id="chat">Chat &amp; Moderation</h2>
+
+        <p>The <code>ChatModerator</code> provides built-in moderation features for live stream chat:</p>
+
+        <pre><code class="language-php">use Fabriq\Streaming\ChatModerator;
+
+$chat = $container-&gt;make(ChatModerator::class);
+
+// Validate a message before sending
+$result = $chat-&gt;validate('acme', 'stream_abc', 'user_123', 'Hello!');
+// ['allowed' => true, 'reason' => '']
+
+// Ban a user (0 = permanent, otherwise seconds)
+$chat-&gt;ban('acme', 'stream_abc', 'troll_user', 3600);
+
+// Unban
+$chat-&gt;unban('acme', 'stream_abc', 'troll_user');
+
+// Add word filter
+$chat-&gt;addFilteredWords('acme', 'stream_abc', ['spam', 'scam']);
+
+// Set slow mode (seconds between messages)
+$chat-&gt;setSlowMode(5);</code></pre>
+
+        <table>
+            <thead>
+                <tr><th>Feature</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Slow Mode</strong></td><td>Minimum delay between messages per user (configurable)</td></tr>
+                <tr><td><strong>Max Length</strong></td><td>Maximum characters per message (default: 500)</td></tr>
+                <tr><td><strong>Word Filter</strong></td><td>Block messages containing banned words (per-stream)</td></tr>
+                <tr><td><strong>Ban List</strong></td><td>Block specific users from chatting (with optional duration)</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Service Provider ──────────────────────────────────── -->
+        <h2 id="service-provider">Service Provider</h2>
+
+        <p>The <code>StreamingServiceProvider</code> registers all streaming services automatically when <code>config('streaming.enabled')</code> is <code>true</code>:</p>
+
+        <pre><code class="language-php">// config/app.php
+'providers' =&gt; [
+    // ... other providers
+    \App\Providers\StreamingServiceProvider::class,
+];</code></pre>
+
+        <p>It registers:</p>
+        <ul>
+            <li><code>StreamManager</code> &mdash; Stream lifecycle management</li>
+            <li><code>SignalingHandler</code> &mdash; WebRTC signaling over WebSocket</li>
+            <li><code>TranscodingPipeline</code> &mdash; FFmpeg process management</li>
+            <li><code>HlsManager</code> &mdash; HLS manifest &amp; segment serving</li>
+            <li><code>ViewerTracker</code> &mdash; Redis-backed viewer counting</li>
+            <li><code>ChatModerator</code> &mdash; Chat moderation features</li>
+        </ul>
+
+        <p>It also automatically registers the <code>/hls/{streamId}/{filename}</code> HTTP route for HLS playback.</p>
+
+        <!-- ── Monitoring ──────────────────────────────────────── -->
+        <h2 id="monitoring">Monitoring</h2>
+
+        <p>Streaming metrics are automatically registered on <code>GET /metrics</code>:</p>
+
+        <table>
+            <thead>
+                <tr><th>Metric</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>streams_active</code></td><td>gauge</td><td>Currently live streams</td></tr>
+                <tr><td><code>stream_viewers_current</code></td><td>gauge</td><td>Total concurrent viewers</td></tr>
+                <tr><td><code>stream_transcodes_active</code></td><td>gauge</td><td>Active FFmpeg processes</td></tr>
+            </tbody>
+        </table>
+
+        <!-- Prev / Next -->
+        <div id="docs-prev-next"></div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-php.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+<script src="assets/docs.js"></script>
+</body>
+</html>
+

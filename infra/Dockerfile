@@ -36,4 +36,4 @@ RUN composer install --no-interaction --prefer-dist
 
 EXPOSE 8000
 
-CMD ["php", "bin/swoolefabric", "serve"]
+CMD ["php", "bin/fabriq", "serve"]

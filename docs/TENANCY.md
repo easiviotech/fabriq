@@ -1,11 +1,11 @@
-# SwooleFabric — Tenancy Architecture
+# Fabriq — Tenancy Architecture
 
 ## Tenant Resolution Chain
 
 Every request must resolve to a tenant, enforced by TenancyMiddleware. The resolution priority:
 
 ```
-1. Host subdomain  →  acme.swoolefabric.dev → "acme"
+1. Host subdomain  →  acme.Fabriq.dev → "acme"
 2. X-Tenant header →  X-Tenant: acme        → "acme"
 3. JWT claim       →  { tenant_id: "acme" } → "acme"
 ```
@@ -37,6 +37,8 @@ Suspended tenants are rejected at resolution time.
 | Jobs | Context restored from job fields (tenant_id stored at dispatch) |
 | Events | Context restored from event fields |
 | Repository | Base `TenantAwareRepository` adds `WHERE tenant_id = ?` |
+| Live Streaming | `StreamManager` carries `tenant_id`; signaling, chat, and viewer tracking are tenant-scoped |
+| Game Server | `GameRoom`, `Matchmaker`, and `LobbyManager` carry `tenant_id`; matchmaking queues are per-tenant |
 
 ## Config Cache
 

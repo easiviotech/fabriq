@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\ExampleChat;
+namespace App\Realtime;
 
 use Swoole\WebSocket\Frame;
 use Swoole\WebSocket\Server as WsServer;
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Realtime\Gateway;
-use SwooleFabric\Realtime\PushService;
-use SwooleFabric\Events\EventBus;
+use Fabriq\Kernel\Context;
+use Fabriq\Realtime\Gateway;
+use Fabriq\Realtime\PushService;
+use Fabriq\Events\EventBus;
+use App\Repositories\ChatRepository;
 
 /**
  * WebSocket message handler for the chat application.
@@ -23,7 +24,7 @@ use SwooleFabric\Events\EventBus;
  * Authentication is handled by WsAuthHandler (onOpen).
  * This handler processes messages from authenticated connections.
  */
-final class WsHandler
+final class ChatWsHandler
 {
     public function __construct(
         private readonly Gateway $gateway,

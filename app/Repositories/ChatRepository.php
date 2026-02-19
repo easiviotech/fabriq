@@ -2,15 +2,14 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\ExampleChat;
-
-use SwooleFabric\Storage\TenantAwareRepository;
+namespace App\Repositories;
 
 /**
  * Chat repository — all queries enforce tenant_id.
  *
- * Uses the TenantAwareRepository base class.
- * Backed by in-memory arrays for demo purposes (swap with DbManager for real use).
+ * Backed by in-memory arrays for demo purposes.
+ * In production, swap with DbManager-backed queries
+ * or extend TenantAwareRepository.
  */
 final class ChatRepository
 {
@@ -80,7 +79,7 @@ final class ChatRepository
     {
         return array_values(array_filter(
             $this->tables['rooms'],
-        fn(array $r) => $r['tenant_id'] === $tenantId
+            fn(array $r) => $r['tenant_id'] === $tenantId
         ));
     }
 
@@ -105,7 +104,7 @@ final class ChatRepository
     {
         return array_values(array_filter(
             $this->tables['messages'],
-        fn(array $m) => $m['tenant_id'] === $tenantId && $m['room_id'] === $roomId
+            fn(array $m) => $m['tenant_id'] === $tenantId && $m['room_id'] === $roomId
         ));
     }
 
@@ -116,7 +115,8 @@ final class ChatRepository
     {
         return count(array_filter(
             $this->tables['messages'],
-        fn(array $m) => $m['tenant_id'] === $tenantId && $m['room_id'] === $roomId
+            fn(array $m) => $m['tenant_id'] === $tenantId && $m['room_id'] === $roomId
         ));
     }
 }
+

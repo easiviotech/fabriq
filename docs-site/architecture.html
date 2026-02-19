@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture - Fabriq Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<aside id="docs-sidebar"></aside>
+<div id="sidebar-overlay"></div>
+<header id="docs-header"></header>
+
+<div id="docs-content">
+    <div id="docs-content-inner" class="docs-content">
+
+        <h1>Architecture</h1>
+        <p>Fabriq is a unified Swoole runtime that consolidates HTTP APIs, WebSocket gateway, queue workers, event consumers, live streaming, and a game server engine into a single deployable process.</p>
+
+        <!-- ── Overview ────────────────────────────────────────────── -->
+        <h2 id="overview">Overview</h2>
+
+        <p>The platform hosts six workload types in a single server:</p>
+
+        <ul>
+            <li><strong>HTTP API server</strong> &mdash; REST endpoints with middleware pipeline</li>
+            <li><strong>WebSocket gateway</strong> &mdash; realtime push and presence</li>
+            <li><strong>Queue workers</strong> &mdash; Redis Streams with retry and DLQ</li>
+            <li><strong>Event consumers</strong> &mdash; publish/subscribe with deduplication</li>
+            <li><strong>Live streaming</strong> &mdash; WebRTC signaling, FFmpeg transcoding (RTMP &rarr; HLS), viewer tracking, chat moderation</li>
+            <li><strong>Game server</strong> &mdash; fixed tick-rate game loop, UDP protocol, matchmaking, lobbies, state sync</li>
+        </ul>
+
+        <p>The high-level request flow:</p>
+
+        <pre><code class="language-text">Client → HTTP/WS/UDP → Middleware Chain → Route Handler → DB/Redis (tenant-scoped)
+                                        → Push to WS rooms (Redis Pub/Sub)
+                                        → Dispatch job (Redis Streams)
+                                        → Emit event (Redis Streams)
+                                        → WebRTC signaling / HLS serving (Streaming)
+                                        → Game room tick / state sync (Gaming)</code></pre>
+
+        <!-- ── Component Diagram ───────────────────────────────────── -->
+        <h2 id="component-diagram">Component Diagram</h2>
+
+        <p>The system is organized into three layers: the Swoole server, background workers, and shared infrastructure.</p>
+
+        <pre><code class="language-text">┌─────────────────────── Swoole Server ───────────────────────┐
+│                                                              │
+│   HTTP Handler ──→ Middleware Chain ──→ Router ──→ Handlers  │
+│   WS Handler ───→ Gateway                    │              │
+│   UDP Handler ──→ UdpProtocol                ├──→ DbManager │
+│                                              ├──→ EventBus  │
+│   Streaming ────→ SignalingHandler            ├──→ PushSvc   │
+│                  TranscodingPipeline (FFmpeg) │              │
+│                  HlsManager                  │              │
+│                                              │              │
+│   Gaming ───────→ GameLoop (tick)            │              │
+│                  GameRoomManager             │              │
+│                  Matchmaker (Redis ZSET)     │              │
+└──────────────────────────────────────────────────────────────┘
+
+┌─── Workers ────┐       ┌──── Infrastructure ────┐
+│ Queue Consumer │──────→│ MySQL 8                │
+│ Event Consumer │──────→│ Redis 7                │
+│ Scheduler      │       │ FFmpeg (streaming)     │
+└────────────────┘       └────────────────────────┘</code></pre>
+
+        <!-- ── Data Flow ───────────────────────────────────────────── -->
+        <h2 id="data-flow">Data Flow: Send Message</h2>
+
+        <p>Here is the full data flow when a client sends a chat message:</p>
+
+        <ol>
+            <li><code>HTTP POST /api/rooms/{id}/messages</code> &rarr; AuthMiddleware &rarr; TenancyMiddleware &rarr; Handler</li>
+            <li>Handler persists message (MySQL, <code>tenant_id</code> enforced)</li>
+            <li>Handler emits <code>MessageSent</code> event (Redis Stream)</li>
+            <li>Handler calls <code>PushService.pushRoom()</code> (Redis PUBLISH)</li>
+            <li>Gateway workers receive pub/sub &rarr; push to local WS fds</li>
+            <li>Event consumer reads <code>MessageSent</code> &rarr; updates projections</li>
+        </ol>
+
+        <!-- ── Tenancy Enforcement ─────────────────────────────────── -->
+        <h2 id="tenancy-enforcement">Tenancy Enforcement</h2>
+
+        <p>Every execution path requires <code>TenantContext</code>. This is enforced at the kernel level:</p>
+
+        <table>
+            <thead>
+                <tr><th>Path</th><th>Where tenant is set</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>HTTP</td><td>TenancyMiddleware (host/header/JWT)</td></tr>
+                <tr><td>WebSocket</td><td>WsAuthHandler (JWT token)</td></tr>
+                <tr><td>Queue Job</td><td>Context restored from job fields</td></tr>
+                <tr><td>Event Consumer</td><td>Context restored from event fields</td></tr>
+                <tr><td>Live Streaming</td><td>StreamManager carries <code>tenant_id</code>; signaling/chat messages are tenant-scoped</td></tr>
+                <tr><td>Game Server</td><td>GameRoom and Matchmaker carry <code>tenant_id</code>; UDP packets include room context</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Bootstrap Lifecycle ─────────────────────────────────── -->
+        <h2 id="bootstrap">Bootstrap Lifecycle</h2>
+
+        <p>When you run <code>bin/fabriq serve</code>, the following sequence executes:</p>
+
+        <pre><code class="language-text">bin/fabriq serve
+  → require bootstrap/app.php
+      → Application::__construct()           loads config/, creates Server, Container
+      → registerConfiguredProviders()        reads config/app.php 'providers' list
+          → each provider->register()        bind services into the container
+      → boot()                               each provider->boot() for cross-service wiring
+  → Application::run()                      starts the Swoole server
+      → onWorkerStart                        DB pools boot, per-worker services,
+                                             GameLoop start, Matchmaker polling
+      → onRequest                            HTTP → Middleware → Router → Handler
+                                             HLS manifest/segment serving (streaming)
+      → onOpen / onMessage / onClose         WebSocket events, signaling, game messages
+      → onUdpPacket                          UDP game state / player input (gaming)</code></pre>
+
+        <p>Each process type has its own lifecycle:</p>
+
+        <pre><code class="language-text">┌──────────────────────────────────────────────────────────────┐
+│                    bin/fabriq serve                           │
+├──────────────────────────────────────────────────────────────┤
+│  bootstrap/app.php       → Create Application instance       │
+│  registerConfiguredProviders() → Register all providers      │
+│  boot()                  → Boot all providers                │
+│  Application::run()      → Start Swoole                      │
+│    ├─ onWorkerStart      → Boot DB pools, create services    │
+│    │                       Start GameLoop, Matchmaker polling │
+│    ├─ onRequest          → Context::reset() → Middleware →   │
+│    │                       Router → Handler → Response        │
+│    │                       HLS manifest/segment serving       │
+│    ├─ onOpen             → WS auth → Gateway::addConnection  │
+│    ├─ onMessage          → WS handler → PushService          │
+│    │                       Signaling (streaming) / Game msgs  │
+│    ├─ onClose            → Gateway::removeConnection         │
+│    └─ onUdpPacket        → UdpProtocol → GameRoom input      │
+└──────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────┐  ┌─────────────────────────────┐
+│  bin/fabriq worker         │  │  bin/fabriq scheduler        │
+├────────────────────────────┤  ├─────────────────────────────┤
+│  Boot DB pools             │  │  Boot DB pools               │
+│  Load bootstrap/worker.php │  │  Load bootstrap/scheduler    │
+│  Load bootstrap/events.php │  │  Poll delayed ZSET           │
+│  Consumer::consume()       │  │  Dispatch recurring jobs     │
+│  EventConsumer::consume()  │  │  ∞ loop                      │
+└────────────────────────────┘  └─────────────────────────────┘</code></pre>
+
+        <h3>Service Providers</h3>
+
+        <p>Service providers are the central place to configure your application. Each provider has two methods:</p>
+
+        <table>
+            <thead>
+                <tr><th>Method</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>register()</code></td><td>Bind services, factories, and singletons into the DI container</td></tr>
+                <tr><td><code>boot()</code></td><td>Cross-service wiring — all bindings are available from every provider</td></tr>
+            </tbody>
+        </table>
+
+        <p>Providers are listed in <code>config/app.php</code>:</p>
+
+        <pre><code class="language-php">'providers' => [
+    \App\Providers\AppServiceProvider::class,
+    \App\Providers\AuthServiceProvider::class,
+    \App\Providers\RouteServiceProvider::class,
+    \App\Providers\EventServiceProvider::class,
+    \App\Providers\RealtimeServiceProvider::class,
+    \App\Providers\StreamingServiceProvider::class,
+    \App\Providers\GamingServiceProvider::class,
+],</code></pre>
+
+        <h3>Bootstrap Files</h3>
+
+        <table>
+            <thead>
+                <tr><th>File</th><th>Receives</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>bootstrap/app.php</code></td><td>&mdash;</td><td>Creates <code>Application</code>, registers providers, boots</td></tr>
+                <tr><td><code>bootstrap/worker.php</code></td><td><code>Consumer $consumer, DbManager $db</code></td><td>Register job handlers</td></tr>
+                <tr><td><code>bootstrap/events.php</code></td><td><code>EventConsumer $consumer, DbManager $db</code></td><td>Register event handlers</td></tr>
+                <tr><td><code>bootstrap/scheduler.php</code></td><td><code>Scheduler $scheduler, DbManager $db</code></td><td>Register scheduled jobs</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Context ─────────────────────────────────────────────── -->
+        <h2 id="context">Context &mdash; The Coroutine-Local Bag</h2>
+
+        <p>Every execution path (HTTP request, WS message, job, event) gets its own isolated <code>Context</code>. This prevents state leakage between concurrent requests in Swoole's coroutine-based model.</p>
+
+        <pre><code class="language-php">use Fabriq\Kernel\Context;
+
+// Read (available after middleware runs)
+Context::tenantId();        // 'tenant-uuid'
+Context::actorId();         // 'user-uuid'
+Context::correlationId();   // 'corr-abc123'
+Context::requestId();       // 'req-def456'
+
+// Write (typically done by middleware, not app code)
+Context::setTenantId('tenant-uuid');
+Context::setActorId('user-uuid');
+Context::setCorrelationId('corr-abc123');
+
+// Extras (arbitrary key-value)
+Context::setExtra('roles', ['admin']);
+Context::getExtra('roles', []);     // ['admin']
+
+// All context (for logging)
+Context::all();
+// ['tenant_id' => '...', 'actor_id' => '...', 'correlation_id' => '...', ...]</code></pre>
+
+        <div class="callout warning">
+            <div class="callout-title">Important</div>
+            <p><code>Context::reset()</code> is called automatically at the start of every HTTP request, WebSocket event, and job. You do <strong>not</strong> need to call it manually.</p>
+        </div>
+
+        <!-- ── Long-Running Safety ─────────────────────────────────── -->
+        <h2 id="safety">Long-Running Safety</h2>
+
+        <p>Because Swoole is a long-running process, Fabriq enforces strict rules to prevent state leakage and resource exhaustion:</p>
+
+        <table>
+            <thead>
+                <tr><th>Rule</th><th>Implementation</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>No global mutable state</td><td><code>Context::reset()</code> per request</td></tr>
+                <tr><td>No stored connections</td><td>Borrow &rarr; use &rarr; release in same coroutine</td></tr>
+                <tr><td>Per-worker pools</td><td>Initialized in <code>onWorkerStart</code></td></tr>
+                <tr><td>Health checks</td><td><code>SELECT 1</code> on every pool borrow</td></tr>
+                <tr><td>Bounded pools</td><td><code>ConnectionPool</code> with <code>max_size</code> via Channel</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Key Classes ─────────────────────────────────────────── -->
+        <h2 id="key-classes">Key Classes Reference</h2>
+
+        <table>
+            <thead>
+                <tr><th>Class</th><th>Import</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>Application</code></td><td><code>Fabriq\Kernel\Application</code></td><td>Main bootstrap, holds config/container/server</td></tr>
+                <tr><td><code>Config</code></td><td><code>Fabriq\Kernel\Config</code></td><td>Dot-notation config access</td></tr>
+                <tr><td><code>Container</code></td><td><code>Fabriq\Kernel\Container</code></td><td>DI container (bind, singleton, instance)</td></tr>
+                <tr><td><code>Context</code></td><td><code>Fabriq\Kernel\Context</code></td><td>Coroutine-local state bag</td></tr>
+                <tr><td><code>Router</code></td><td><code>Fabriq\Http\Router</code></td><td>HTTP routing</td></tr>
+                <tr><td><code>DbManager</code></td><td><code>Fabriq\Storage\DbManager</code></td><td>Connection pool manager</td></tr>
+                <tr><td><code>TenantResolver</code></td><td><code>Fabriq\Tenancy\TenantResolver</code></td><td>Multi-tenant resolution</td></tr>
+                <tr><td><code>EventBus</code></td><td><code>Fabriq\Events\EventBus</code></td><td>Publish domain events</td></tr>
+                <tr><td><code>Dispatcher</code></td><td><code>Fabriq\Queue\Dispatcher</code></td><td>Dispatch background jobs</td></tr>
+                <tr><td><code>Gateway</code></td><td><code>Fabriq\Realtime\Gateway</code></td><td>WS connection management</td></tr>
+                <tr><td><code>PushService</code></td><td><code>Fabriq\Realtime\PushService</code></td><td>Push to WS clients</td></tr>
+                <tr><td><code>Logger</code></td><td><code>Fabriq\Observability\Logger</code></td><td>Structured JSON logging</td></tr>
+                <tr><td><code>SignalingHandler</code></td><td><code>Fabriq\Streaming\SignalingHandler</code></td><td>WebRTC SDP/ICE exchange over WebSocket</td></tr>
+                <tr><td><code>StreamManager</code></td><td><code>Fabriq\Streaming\StreamManager</code></td><td>Live stream lifecycle management</td></tr>
+                <tr><td><code>TranscodingPipeline</code></td><td><code>Fabriq\Streaming\TranscodingPipeline</code></td><td>FFmpeg RTMP &rarr; HLS transcoding</td></tr>
+                <tr><td><code>ViewerTracker</code></td><td><code>Fabriq\Streaming\ViewerTracker</code></td><td>Redis-backed concurrent viewer counting</td></tr>
+                <tr><td><code>ChatModerator</code></td><td><code>Fabriq\Streaming\ChatModerator</code></td><td>Chat slow mode, word filters, bans</td></tr>
+                <tr><td><code>GameLoop</code></td><td><code>Fabriq\Gaming\GameLoop</code></td><td>Fixed tick-rate game engine</td></tr>
+                <tr><td><code>GameRoom</code></td><td><code>Fabriq\Gaming\GameRoom</code></td><td>Single room: state, players, lifecycle</td></tr>
+                <tr><td><code>GameRoomManager</code></td><td><code>Fabriq\Gaming\GameRoomManager</code></td><td>Room CRUD, cross-worker coordination</td></tr>
+                <tr><td><code>Matchmaker</code></td><td><code>Fabriq\Gaming\Matchmaker</code></td><td>Redis ZSET skill-based matchmaking</td></tr>
+                <tr><td><code>LobbyManager</code></td><td><code>Fabriq\Gaming\LobbyManager</code></td><td>Pre-game lobbies with ready checks</td></tr>
+                <tr><td><code>UdpProtocol</code></td><td><code>Fabriq\Gaming\UdpProtocol</code></td><td>Binary encode/decode (MessagePack/JSON)</td></tr>
+                <tr><td><code>StateSync</code></td><td><code>Fabriq\Gaming\StateSync</code></td><td>Delta compression state synchronization</td></tr>
+                <tr><td><code>PlayerSession</code></td><td><code>Fabriq\Gaming\PlayerSession</code></td><td>Connection tracking &amp; reconnection</td></tr>
+            </tbody>
+        </table>
+
+        <!-- Prev / Next -->
+        <div id="docs-prev-next"></div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-php.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+<script src="assets/docs.js"></script>
+</body>
+</html>
+

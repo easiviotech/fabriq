@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Security;
+namespace Fabriq\Security;
 
 /**
  * JWT authenticator — encode and decode HS256 JSON Web Tokens.

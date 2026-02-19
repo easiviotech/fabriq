@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Events;
+namespace Fabriq\Events;
 
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Kernel\Context;
+use Fabriq\Storage\DbManager;
 
 /**
  * Event bus — publishes domain events to Redis Streams.

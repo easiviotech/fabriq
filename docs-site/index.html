@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started - Fabriq Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside id="docs-sidebar"></aside>
+<div id="sidebar-overlay"></div>
+
+<!-- Header -->
+<header id="docs-header"></header>
+
+<!-- Content -->
+<div id="docs-content">
+    <div id="docs-content-inner" class="docs-content">
+
+        <h1>Getting Started</h1>
+        <p>Fabriq is a unified Swoole-powered backend platform &mdash; HTTP APIs, WebSocket realtime, background jobs, event bus, live streaming, and game server with first-class multi-tenancy. Everything runs in a single long-running PHP process.</p>
+
+        <!-- ── Prerequisites ───────────────────────────────────────── -->
+        <h2 id="prerequisites">Prerequisites</h2>
+
+        <table>
+            <thead>
+                <tr><th>Dependency</th><th>Version</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>PHP</td><td>&ge; 8.2</td></tr>
+                <tr><td>Swoole extension</td><td>&ge; 5.1</td></tr>
+                <tr><td>MySQL</td><td>8.0+</td></tr>
+                <tr><td>Redis</td><td>7.x</td></tr>
+                <tr><td>Docker + Compose (recommended)</td><td>v2</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Installation ─────────────────────────────────────────── -->
+        <h2 id="installation">Installation</h2>
+
+        <p>Fabriq runs on PHP with the Swoole extension. Below are instructions for installing both on common platforms.</p>
+
+        <h3 id="install-php">1. Install PHP 8.2+</h3>
+
+        <h4>Ubuntu / Debian</h4>
+
+        <pre><code class="language-bash">sudo apt update
+sudo apt install -y software-properties-common
+sudo add-apt-repository ppa:ondrej/php
+sudo apt update
+sudo apt install -y php8.3-cli php8.3-dev php8.3-curl php8.3-mbstring php8.3-xml php8.3-zip php8.3-mysql</code></pre>
+
+        <h4>macOS (Homebrew)</h4>
+
+        <pre><code class="language-bash">brew install php@8.3
+# Ensure it's on your PATH
+echo 'export PATH="/opt/homebrew/opt/php@8.3/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc</code></pre>
+
+        <h4>Windows</h4>
+
+        <pre><code class="language-bash"># Option 1: Download from https://windows.php.net/download
+# Extract to C:\php and add to your System PATH
+
+# Option 2: Using Chocolatey
+choco install php --version=8.3
+
+# Option 3: Using Scoop
+scoop install php</code></pre>
+
+        <h4>Verify</h4>
+
+        <pre><code class="language-bash">php -v
+# PHP 8.3.x (cli) ...</code></pre>
+
+        <h3 id="install-swoole">2. Install the Swoole Extension</h3>
+
+        <p>Swoole is a high-performance coroutine-based PHP extension that powers Fabriq's async HTTP server, WebSockets, connection pools, and background workers &mdash; all in a single long-running process.</p>
+
+        <h4>Via PECL (Linux / macOS)</h4>
+
+        <pre><code class="language-bash"># Install build dependencies (Ubuntu/Debian)
+sudo apt install -y php8.3-dev gcc make libcurl4-openssl-dev libssl-dev
+
+# Install Swoole
+sudo pecl install swoole
+
+# Enable the extension
+echo "extension=swoole" | sudo tee /etc/php/8.3/cli/conf.d/20-swoole.ini
+
+# Verify
+php -m | grep swoole
+php --ri swoole</code></pre>
+
+        <div class="callout tip">
+            <div class="callout-title">PECL Prompts</div>
+            <p>During <code>pecl install swoole</code> you'll be asked about optional features. The recommended answers for Fabriq:</p>
+            <ul>
+                <li><strong>enable sockets support?</strong> &rarr; <code>yes</code></li>
+                <li><strong>enable openssl support?</strong> &rarr; <code>yes</code></li>
+                <li><strong>enable http2 support?</strong> &rarr; <code>yes</code></li>
+                <li><strong>enable curl support?</strong> &rarr; <code>yes</code></li>
+                <li><strong>enable mysqlnd support?</strong> &rarr; <code>yes</code></li>
+            </ul>
+        </div>
+
+        <h4>Via Docker (Recommended for Production)</h4>
+
+        <p>The included <code>infra/Dockerfile</code> already handles everything:</p>
+
+        <pre><code class="language-dockerfile">FROM php:8.3-cli
+
+# System dependencies
+RUN apt-get update &amp;&amp; apt-get install -y \
+    libcurl4-openssl-dev libssl-dev unzip git \
+    &amp;&amp; rm -rf /var/lib/apt/lists/*
+
+# Install Swoole
+RUN pecl install swoole-5.1.5 \
+    &amp;&amp; docker-php-ext-enable swoole
+
+# Install PDO MySQL
+RUN docker-php-ext-install pdo pdo_mysql
+
+# Install Redis extension
+RUN pecl install redis \
+    &amp;&amp; docker-php-ext-enable redis
+
+# Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer</code></pre>
+
+        <h4>Compiling from Source (Advanced)</h4>
+
+        <pre><code class="language-bash">git clone https://github.com/swoole/swoole-src.git
+cd swoole-src
+git checkout v5.1.5
+
+phpize
+./configure \
+    --enable-openssl \
+    --enable-http2 \
+    --enable-sockets \
+    --enable-mysqlnd
+make -j$(nproc)
+sudo make install
+
+echo "extension=swoole" | sudo tee /etc/php/8.3/cli/conf.d/20-swoole.ini</code></pre>
+
+        <h3 id="install-verify">3. Verify Your Environment</h3>
+
+        <pre><code class="language-bash"># Check PHP version (must be >= 8.2)
+php -v
+
+# Check Swoole is loaded
+php -m | grep swoole
+
+# Check Swoole version details
+php --ri swoole | head -5
+
+# Quick smoke test — starts and immediately shuts down a Swoole HTTP server
+php -r "
+\$server = new Swoole\Http\Server('127.0.0.1', 0);
+\$server->on('request', function() {});
+echo 'Swoole ' . swoole_version() . ' is working!' . PHP_EOL;
+"</code></pre>
+
+        <div class="callout warning">
+            <div class="callout-title">Important</div>
+            <p>Swoole replaces PHP's traditional request lifecycle. Do <strong>not</strong> install it on a server already running php-fpm for other projects unless you understand the implications. Use Docker or a dedicated VM/container.</p>
+        </div>
+
+        <h3 id="install-deps">4. Install Project Dependencies</h3>
+
+        <p>Once PHP and Swoole are ready, install Composer and the project:</p>
+
+        <pre><code class="language-bash"># Install Composer (if not already installed)
+curl -sS https://getcomposer.org/installer | php
+sudo mv composer.phar /usr/local/bin/composer
+
+# Install Fabriq dependencies
+cd myapp
+composer install</code></pre>
+
+        <!-- ── Quick Start ─────────────────────────────────────────── -->
+        <h2 id="quick-start">Quick Start</h2>
+
+        <h3>Docker (Recommended)</h3>
+
+        <pre><code class="language-bash"># Clone the project
+git clone &lt;repo-url&gt; myapp && cd myapp
+
+# Start MySQL, Redis, and the app container
+cd infra
+docker compose up -d
+
+# The server is now running on http://localhost:8000
+curl http://localhost:8000/health
+# → {"status":"ok","service":"Fabriq","timestamp":1740000000,...}</code></pre>
+
+        <h3>Local Development</h3>
+
+        <pre><code class="language-bash">composer install
+
+# Start the HTTP + WebSocket server
+php bin/fabriq serve
+
+# In another terminal — start the queue worker
+php bin/fabriq worker
+
+# In another terminal — start the scheduler (optional)
+php bin/fabriq scheduler</code></pre>
+
+        <div class="callout tip">
+            <div class="callout-title">Tip</div>
+            <p>Configuration is loaded automatically from the <code>config/</code> directory. Each file (e.g. <code>config/server.php</code>, <code>config/database.php</code>) returns an array and is accessible via dot notation: <code>$config->get('server.port')</code>.</p>
+        </div>
+
+        <!-- ── CLI Commands ────────────────────────────────────────── -->
+        <h2 id="cli-commands">CLI Commands</h2>
+
+        <table>
+            <thead>
+                <tr><th>Command</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>php bin/fabriq serve [config]</code></td><td>Start HTTP + WebSocket + UDP server (with streaming &amp; gaming if enabled)</td></tr>
+                <tr><td><code>php bin/fabriq worker [config]</code></td><td>Start queue consumer workers</td></tr>
+                <tr><td><code>php bin/fabriq scheduler [config]</code></td><td>Start the cron-like job scheduler</td></tr>
+                <tr><td><code>php bin/fabriq help</code></td><td>Show help</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Health Check ────────────────────────────────────────── -->
+        <h2 id="health-check">Health Check</h2>
+
+        <pre><code class="language-bash">curl http://localhost:8000/health</code></pre>
+
+        <p>Response:</p>
+
+        <pre><code class="language-json">{
+    "status": "ok",
+    "service": "Fabriq",
+    "timestamp": 1740000000,
+    "request_id": "abc123"
+}</code></pre>
+
+        <!-- ── Project Structure ───────────────────────────────────── -->
+        <h2 id="project-structure">Project Structure</h2>
+
+        <pre><code class="language-text">myapp/
+├── app/                           # Your application code
+│   ├── Http/
+│   │   ├── Controllers/           # HTTP request controllers
+│   │   │   ├── Controller.php     # Base controller
+│   │   │   ├── AuthController.php
+│   │   │   └── ...
+│   │   └── Middleware/            # Custom middleware
+│   ├── Providers/                 # Service providers (register + boot)
+│   │   ├── AppServiceProvider.php
+│   │   ├── AuthServiceProvider.php
+│   │   ├── RouteServiceProvider.php
+│   │   ├── EventServiceProvider.php
+│   │   ├── RealtimeServiceProvider.php
+│   │   ├── StreamingServiceProvider.php
+│   │   └── GamingServiceProvider.php
+│   ├── Repositories/              # Data access layer
+│   ├── Events/                    # Domain event classes
+│   ├── Listeners/                 # Event listener handlers
+│   ├── Jobs/                      # Queued job classes
+│   └── Realtime/                  # WebSocket message handlers
+├── bin/
+│   └── fabriq                     # CLI entry point
+├── bootstrap/
+│   └── app.php                    # Application bootstrap
+├── config/
+│   ├── app.php                    # App name + service providers list
+│   ├── server.php                 # Swoole server host, port, workers, UDP
+│   ├── database.php               # MySQL connection pools
+│   ├── redis.php                  # Redis connection settings
+│   ├── auth.php                   # JWT + RBAC roles
+│   ├── tenancy.php                # Resolver chain + cache TTL
+│   ├── queue.php                  # Queue consumer groups + retry
+│   ├── events.php                 # Event consumer groups
+│   ├── observability.php          # Log level
+│   ├── streaming.php              # Live streaming (FFmpeg, HLS, chat)
+│   └── gaming.php                 # Game server (tick rates, matchmaking)
+├── routes/
+│   ├── api.php                    # HTTP API route definitions
+│   └── channels.php               # WebSocket channel definitions
+├── database/
+│   └── migrations/                # SQL migration files
+├── infra/
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── mysql/init.sql
+├── packages/                      # Framework packages
+│   ├── kernel/                    # Application, Server, Config, Container, Context
+│   ├── http/                      # Router, Request, Response, Middleware, Validator
+│   ├── tenancy/                   # TenantResolver, TenantContext, Cache
+│   ├── storage/                   # Connection pools, DbManager, TenantAwareRepository
+│   ├── realtime/                  # Gateway, Presence, PushService, Subscriber
+│   ├── queue/                     # Dispatcher, Consumer, Scheduler, Idempotency
+│   ├── events/                    # EventBus, EventConsumer, EventSchema
+│   ├── security/                  # JWT, API Keys, PolicyEngine, RateLimiter
+│   ├── observability/             # Logger, MetricsCollector, TraceContext
+│   ├── streaming/                 # SignalingHandler, StreamManager, Transcoding, HLS
+│   └── gaming/                    # GameLoop, GameRoom, Matchmaker, UdpProtocol
+├── tests/
+├── composer.json
+└── phpunit.xml</code></pre>
+
+        <div class="callout tip">
+            <div class="callout-title">Convention</div>
+            <p>Your application code lives in <code>app/</code> (PSR-4 namespace <code>App\</code>). The framework lives in <code>packages/</code>. Service providers in <code>app/Providers/</code> wire everything together via a register &rarr; boot lifecycle.</p>
+        </div>
+
+        <p>The <code>App\</code> namespace is already registered in <code>composer.json</code>:</p>
+
+        <pre><code class="language-json">{
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Fabriq\\Streaming\\": "packages/streaming/src/",
+            "Fabriq\\Gaming\\": "packages/gaming/src/"
+        }
+    }
+}</code></pre>
+
+        <!-- ── Packages ────────────────────────────────────────────── -->
+        <h2 id="packages">Packages</h2>
+
+        <table>
+            <thead>
+                <tr><th>Package</th><th>Path</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Kernel</strong></td><td><code>packages/kernel/</code></td><td>Swoole server bootstrap, Context (coroutine-local), Config, Container, Application</td></tr>
+                <tr><td><strong>Tenancy</strong></td><td><code>packages/tenancy/</code></td><td>TenantResolver, TenantContext, TenantConfigCache</td></tr>
+                <tr><td><strong>Storage</strong></td><td><code>packages/storage/</code></td><td>Connection pools (Channel-based), DbManager, TenantAwareRepository</td></tr>
+                <tr><td><strong>HTTP</strong></td><td><code>packages/http/</code></td><td>Router, Request/Response wrappers, MiddlewareChain, Validator</td></tr>
+                <tr><td><strong>Realtime</strong></td><td><code>packages/realtime/</code></td><td>Gateway (fd mapping), Presence, PushService, RealtimeSubscriber</td></tr>
+                <tr><td><strong>Queue</strong></td><td><code>packages/queue/</code></td><td>Dispatcher, Consumer (retry/DLQ), Scheduler, IdempotencyStore</td></tr>
+                <tr><td><strong>Events</strong></td><td><code>packages/events/</code></td><td>EventBus, EventConsumer (dedupe), EventSchema</td></tr>
+                <tr><td><strong>Security</strong></td><td><code>packages/security/</code></td><td>JwtAuthenticator, ApiKeyAuthenticator, PolicyEngine (RBAC+ABAC), RateLimiter</td></tr>
+                <tr><td><strong>Observability</strong></td><td><code>packages/observability/</code></td><td>Logger (structured JSON), MetricsCollector (Prometheus), TraceContext</td></tr>
+                <tr><td><strong>Streaming</strong></td><td><code>packages/streaming/</code></td><td>SignalingHandler (WebRTC), StreamManager, TranscodingPipeline (FFmpeg/HLS), ViewerTracker, ChatModerator</td></tr>
+                <tr><td><strong>Gaming</strong></td><td><code>packages/gaming/</code></td><td>GameLoop, GameRoom, GameRoomManager, Matchmaker (Redis ZSET), LobbyManager, UdpProtocol (MessagePack), StateSync</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Tech Stack ──────────────────────────────────────────── -->
+        <h2 id="tech-stack">Tech Stack</h2>
+
+        <table>
+            <thead>
+                <tr><th>Component</th><th>Version</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>PHP</td><td>&ge; 8.2 (target 8.3)</td></tr>
+                <tr><td>Swoole</td><td>Latest stable</td></tr>
+                <tr><td>MySQL</td><td>8.0</td></tr>
+                <tr><td>Redis</td><td>7.x</td></tr>
+                <tr><td>Docker Compose</td><td>v2</td></tr>
+            </tbody>
+        </table>
+
+        <!-- Prev / Next -->
+        <div id="docs-prev-next"></div>
+
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-php.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+<script src="assets/docs.js"></script>
+</body>
+</html>
+

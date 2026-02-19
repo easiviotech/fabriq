@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Realtime;
+namespace Fabriq\Realtime;
 
 use Swoole\Coroutine;
 use Swoole\Coroutine\Redis;
 use Swoole\WebSocket\Server as WsServer;
-use SwooleFabric\Kernel\Config;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Kernel\Config;
+use Fabriq\Storage\DbManager;
 
 /**
  * Per-worker Redis Pub/Sub subscriber.

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Queue;
+namespace Fabriq\Queue;
 
 use Swoole\Coroutine;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Storage\DbManager;
 
 /**
  * Job scheduler — cron-like timer that promotes delayed jobs.
@@ -118,7 +118,7 @@ final class Scheduler
                     $redis->zRem($zsetKey, $serialized);
                 }
             } catch (\Throwable $e) {
-                error_log("[SwooleFabric][Scheduler] Error promoting delayed jobs: {$e->getMessage()}");
+                error_log("[Fabriq][Scheduler] Error promoting delayed jobs: {$e->getMessage()}");
             } finally {
                 $this->db->releaseRedis($redis);
             }
@@ -152,7 +152,7 @@ final class Scheduler
                 try {
                     $redis->xAdd($streamKey, '*', $message);
                 } catch (\Throwable $e) {
-                    error_log("[SwooleFabric][Scheduler] Error dispatching scheduled job: {$e->getMessage()}");
+                    error_log("[Fabriq][Scheduler] Error dispatching scheduled job: {$e->getMessage()}");
                 } finally {
                     $this->db->releaseRedis($redis);
                 }

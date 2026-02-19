@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Observability;
+namespace Fabriq\Observability;
 
-use SwooleFabric\Kernel\Context;
+use Fabriq\Kernel\Context;
 
 /**
  * Trace context — manages W3C-compatible trace propagation.

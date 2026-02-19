@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Queue;
+namespace Fabriq\Queue;
 
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Storage\DbManager;
 
 /**
  * Idempotency store — ensures operations are executed at most once.

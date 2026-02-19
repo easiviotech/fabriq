@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Observability;
+namespace Fabriq\Observability;
 
-use SwooleFabric\Kernel\Context;
+use Fabriq\Kernel\Context;
 
 /**
  * Structured JSON logger — writes to STDERR.

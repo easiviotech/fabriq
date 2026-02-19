@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Realtime;
+namespace Fabriq\Realtime;
 
 use Swoole\WebSocket\Server as WsServer;
 

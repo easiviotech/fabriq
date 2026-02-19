@@ -1,4 +1,4 @@
-# SwooleFabric — Operations Guide
+# Fabriq — Operations Guide
 
 ## Running Locally
 
@@ -14,17 +14,17 @@ docker compose up -d
 
 ### Start Server
 ```bash
-docker exec -it sf-app php bin/swoolefabric serve
+docker exec -it fabriq-app php bin/fabriq serve
 ```
 
 ### Start Worker
 ```bash
-docker exec -it sf-app php bin/swoolefabric worker
+docker exec -it fabriq-app php bin/fabriq worker
 ```
 
 ### Start Scheduler
 ```bash
-docker exec -it sf-app php bin/swoolefabric scheduler
+docker exec -it fabriq-app php bin/fabriq scheduler
 ```
 
 ## Health Check
@@ -52,6 +52,15 @@ http_requests_total 1523
 # HELP ws_connections Active WebSocket connections
 # TYPE ws_connections gauge
 ws_connections 42
+# HELP streams_active Currently live streams
+# TYPE streams_active gauge
+streams_active 3
+# HELP game_rooms_active Active game rooms
+# TYPE game_rooms_active gauge
+game_rooms_active 12
+# HELP udp_packets_total UDP packets processed
+# TYPE udp_packets_total counter
+udp_packets_total 98432
 ```
 
 ### Key Metrics
@@ -66,6 +75,14 @@ ws_connections 42
 | `queue_lag` | gauge | Pending messages in queue |
 | `db_pool_in_use` | gauge | Active DB connections |
 | `db_pool_waits` | counter | Times a borrow had to wait |
+| `streams_active` | gauge | Currently live streams |
+| `stream_viewers_current` | gauge | Total concurrent stream viewers |
+| `stream_transcodes_active` | gauge | Active FFmpeg transcoding processes |
+| `game_rooms_active` | gauge | Active game rooms |
+| `game_players_connected` | gauge | Connected game players |
+| `game_tick_latency_ms` | histogram | Game loop tick timing |
+| `udp_packets_total` | counter | UDP packets processed |
+| `matchmaking_queue_size` | gauge | Players waiting for match |
 
 ## Logging
 

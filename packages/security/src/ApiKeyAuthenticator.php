@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Security;
+namespace Fabriq\Security;
 
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Storage\DbManager;
 
 /**
  * API key authenticator.

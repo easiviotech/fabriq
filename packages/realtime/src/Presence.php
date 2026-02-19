@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Realtime;
+namespace Fabriq\Realtime;
 
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Storage\DbManager;
 
 /**
  * Redis-backed presence tracking.

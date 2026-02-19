@@ -5,7 +5,7 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile
-    container_name: swoolefabric-app
+    container_name: fabriq-app
     ports:
       - "8000:8000"
     volumes:
@@ -18,18 +18,18 @@ services:
         condition: service_healthy
     environment:
       - SWOOLE_FABRIC_ENV=local
-    command: ["php", "bin/swoolefabric", "serve"]
+    command: ["php", "bin/fabriq", "serve"]
     networks:
       - sf-net
 
   mysql:
     image: mysql:8.0
-    container_name: swoolefabric-mysql
+    container_name: fabriq-mysql
     ports:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_USER: swoolefabric
+      MYSQL_USER: fabriq
       MYSQL_PASSWORD: sfpass
       MYSQL_DATABASE: sf_platform
     volumes:
@@ -45,7 +45,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: swoolefabric-redis
+    container_name: fabriq-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -58,7 +58,7 @@ services:
 
   adminer:
     image: adminer
-    container_name: swoolefabric-adminer
+    container_name: fabriq-adminer
     ports:
       - "8080:8080"
     depends_on:

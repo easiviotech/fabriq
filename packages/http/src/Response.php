@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Http;
+namespace Fabriq\Http;
 
 use Swoole\Http\Response as SwooleResponse;
 

@@ -1,4 +1,4 @@
-# SwooleFabric — Security Architecture
+# Fabriq — Security Architecture
 
 ## Authentication
 

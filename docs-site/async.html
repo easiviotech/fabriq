@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Async Processing - Fabriq Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<aside id="docs-sidebar"></aside>
+<div id="sidebar-overlay"></div>
+<header id="docs-header"></header>
+
+<div id="docs-content">
+    <div id="docs-content-inner" class="docs-content">
+
+        <h1>Async Processing</h1>
+        <p>Fabriq provides background jobs, domain events, scheduled tasks, and idempotency &mdash; all powered by Redis Streams with consumer groups, automatic retries, and deduplication.</p>
+
+        <!-- ── Background Jobs ─────────────────────────────────────── -->
+        <h2 id="jobs">Background Jobs &amp; Queues</h2>
+
+        <p>Jobs use <strong>Redis Streams</strong> with consumer groups, automatic retries, and dead-letter queues.</p>
+
+        <h3>Dispatching Jobs</h3>
+
+        <pre><code class="language-php">use Fabriq\Queue\Dispatcher;
+
+$dispatcher = new Dispatcher($dbManager);
+
+// Immediate dispatch
+$messageId = $dispatcher->dispatch(
+    queue: 'default',
+    jobType: 'send_email',
+    payload: ['to' => 'alice@example.com', 'subject' => 'Welcome!'],
+);
+
+// Delayed dispatch (runs after 300 seconds)
+$dispatcher->dispatchDelayed(
+    queue: 'default',
+    jobType: 'send_reminder',
+    payload: ['user_id' => 'user-123'],
+    delaySeconds: 300,
+);
+
+// With idempotency key (prevents duplicate processing)
+$dispatcher->dispatch(
+    queue: 'default',
+    jobType: 'process_payment',
+    payload: ['order_id' => 'order-456', 'amount' => 99.99],
+    idempotencyKey: 'payment:order-456',
+);</code></pre>
+
+        <div class="callout tip">
+            <div class="callout-title">Tip</div>
+            <p>Context (<code>tenant_id</code>, <code>actor_id</code>, <code>correlation_id</code>) is automatically propagated to the job. You don't need to pass these manually.</p>
+        </div>
+
+        <h3>Handling Jobs</h3>
+
+        <p>Create <code>bootstrap/worker.php</code>:</p>
+
+        <pre><code class="language-php">&lt;?php
+declare(strict_types=1);
+
+use Fabriq\Queue\Consumer;
+use Fabriq\Storage\DbManager;
+
+return function (Consumer $consumer, DbManager $db): void {
+
+    $consumer->registerHandler('send_email', function (array $payload) {
+        $to      = $payload['to'];
+        $subject = $payload['subject'];
+        // ... send the email ...
+        echo "Email sent to {$to}: {$subject}\n";
+    });
+
+    $consumer->registerHandler('process_payment', function (array $payload) use ($db) {
+        $orderId = $payload['order_id'];
+        $amount  = $payload['amount'];
+        // ... process payment via DB ...
+    });
+
+};</code></pre>
+
+        <p>Start the worker:</p>
+
+        <pre><code class="language-bash">php bin/fabriq worker</code></pre>
+
+        <h3>Retry &amp; Dead Letter Queue</h3>
+
+        <table>
+            <thead>
+                <tr><th>Config</th><th>Default</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>max_attempts</code></td><td>3</td><td>Max retries before DLQ</td></tr>
+                <tr><td><code>backoff</code></td><td><code>[1, 5, 30]</code></td><td>Seconds to wait between retries</td></tr>
+            </tbody>
+        </table>
+
+        <p>Failed jobs are moved to <code>sf:dlq:{queueName}</code> after exhausting retries.</p>
+
+        <!-- ── Event Bus ───────────────────────────────────────────── -->
+        <h2 id="events">Event Bus</h2>
+
+        <p>Domain events use <strong>Redis Streams</strong> with consumer group delivery and deduplication.</p>
+
+        <h3>Emitting Events</h3>
+
+        <pre><code class="language-php">use Fabriq\Events\EventBus;
+
+// Simple emit (auto-populates tenant_id, actor_id, correlation_id from Context)
+$eventBus->emit('order.created', [
+    'order_id' => 'order-123',
+    'total'    => 199.99,
+], 'dedupe:order-123');   // Optional dedupe key
+
+// Or build a schema explicitly
+use Fabriq\Events\EventSchema;
+
+$event = EventSchema::create(
+    eventType: 'order.created',
+    tenantId: $tenantId,
+    payload: ['order_id' => 'order-123'],
+    dedupeKey: 'dedupe:order-123',
+);
+$eventBus->publish($event);</code></pre>
+
+        <h3>Consuming Events</h3>
+
+        <p>Create <code>bootstrap/events.php</code>:</p>
+
+        <pre><code class="language-php">&lt;?php
+declare(strict_types=1);
+
+use Fabriq\Events\EventConsumer;
+use Fabriq\Events\EventSchema;
+use Fabriq\Storage\DbManager;
+
+return function (EventConsumer $consumer, DbManager $db): void {
+
+    $consumer->on('order.created', function (EventSchema $event) use ($db) {
+        $orderId = $event->payload['order_id'] ?? '';
+        $tenantId = $event->tenantId;
+        // Update projections, send notifications, etc.
+        echo "Order {$orderId} created for tenant {$tenantId}\n";
+    });
+
+    $consumer->on('message.sent', function (EventSchema $event) {
+        // Update message counters, search index, etc.
+    });
+
+};</code></pre>
+
+        <p>Events are consumed by the <code>worker</code> process (runs alongside queue consumption).</p>
+
+        <h3>Deduplication</h3>
+
+        <p>Each event carries a <code>dedupeKey</code>. The <code>EventConsumer</code> tracks processed keys in a Redis SET and skips duplicates automatically. TTL is 24 hours.</p>
+
+        <!-- ── Scheduled Jobs ──────────────────────────────────────── -->
+        <h2 id="scheduling">Scheduled Jobs</h2>
+
+        <p>The scheduler dispatches recurring jobs on a configurable interval.</p>
+
+        <h3>Defining Schedules</h3>
+
+        <p>Create <code>bootstrap/scheduler.php</code>:</p>
+
+        <pre><code class="language-php">&lt;?php
+declare(strict_types=1);
+
+use Fabriq\Queue\Scheduler;
+use Fabriq\Storage\DbManager;
+
+return function (Scheduler $scheduler, DbManager $db): void {
+
+    // Run every 60 seconds
+    $scheduler->every(
+        queue: 'default',
+        jobType: 'cleanup_expired_tokens',
+        payload: [],
+        intervalSeconds: 60,
+    );
+
+    // Run every 5 minutes
+    $scheduler->every(
+        queue: 'default',
+        jobType: 'sync_external_api',
+        payload: ['source' => 'stripe'],
+        intervalSeconds: 300,
+    );
+
+    // Run every hour
+    $scheduler->every(
+        queue: 'default',
+        jobType: 'generate_daily_report',
+        payload: [],
+        intervalSeconds: 3600,
+    );
+
+};</code></pre>
+
+        <p>Start the scheduler:</p>
+
+        <pre><code class="language-bash">php bin/fabriq scheduler</code></pre>
+
+        <div class="callout warning">
+            <div class="callout-title">Important</div>
+            <p>Run exactly <strong>one</strong> scheduler instance. Running multiple will cause duplicate job dispatches.</p>
+        </div>
+
+        <p>The scheduler also promotes <strong>delayed jobs</strong> (dispatched via <code>dispatchDelayed()</code>) from the delay ZSET to the target stream when they're due.</p>
+
+        <!-- ── Idempotency ─────────────────────────────────────────── -->
+        <h2 id="idempotency">Idempotency &amp; Deduplication</h2>
+
+        <p>Idempotency ensures that <strong>processing the same request/job/event multiple times produces the same result</strong> as processing it once. This is critical for:</p>
+
+        <ul>
+            <li>HTTP retries (network failures, client retries)</li>
+            <li>Queue redeliveries (consumer crashes)</li>
+            <li>Event replay (at-least-once delivery)</li>
+        </ul>
+
+        <h3>HTTP Requests</h3>
+
+        <p>Client sends <code>Idempotency-Key</code> header:</p>
+
+        <pre><code class="language-text">POST /api/messages
+Idempotency-Key: msg-abc-123</code></pre>
+
+        <p>Server checks if key exists &rarr; returns cached response or processes and stores result.</p>
+
+        <h3>Queue Jobs</h3>
+
+        <p>Jobs carry <code>idempotency_key</code> in their stream fields:</p>
+
+        <pre><code class="language-text">XADD sf:queue:default * type SendEmail idempotency_key "email-user-456"</code></pre>
+
+        <p>Consumer checks before processing &rarr; skips if already processed.</p>
+
+        <h3>Events</h3>
+
+        <p>Events carry <code>event_id</code> (stable across retries). Consumer checks dedupe store &rarr; skips duplicate event IDs.</p>
+
+        <h3>Storage Layers</h3>
+
+        <table>
+            <thead>
+                <tr><th>Layer</th><th>Backend</th><th>TTL</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Primary</td><td>Redis SETNX</td><td>24h</td><td>Fast uniqueness check</td></tr>
+                <tr><td>Fallback</td><td>Platform DB <code>idempotency_keys</code></td><td>24h</td><td>Durable, survives Redis restarts</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Behavior Matrix</h3>
+
+        <table>
+            <thead>
+                <tr><th>Scenario</th><th>First Call</th><th>Second Call</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>HTTP with Idempotency-Key</td><td>Process + store response</td><td>Return cached response</td></tr>
+                <tr><td>Job with idempotency_key</td><td>Process + ack</td><td>Ack without processing</td></tr>
+                <tr><td>Event with event_id</td><td>Process + store</td><td>Skip (dedupe)</td></tr>
+                <tr><td>No key provided</td><td>Always process</td><td>Always process</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Key Format</h3>
+
+        <pre><code class="language-text">sf:idempotency:{key}</code></pre>
+
+        <p>Where <code>{key}</code> is the raw Idempotency-Key value (HTTP) or job/event stable ID.</p>
+
+        <div class="callout tip">
+            <div class="callout-title">Safety</div>
+            <p>SETNX ensures exactly-once semantics in Redis (single-threaded). TTL-based expiry prevents unbounded storage growth. The DB fallback provides durability if Redis restarts between check and store.</p>
+        </div>
+
+        <!-- Prev / Next -->
+        <div id="docs-prev-next"></div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-php.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+<script src="assets/docs.js"></script>
+</body>
+</html>
+

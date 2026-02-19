@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Observability;
+namespace Fabriq\Observability;
 
 /**
  * Prometheus-compatible metrics collector.

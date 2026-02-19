@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Tests\Unit\Tenancy;
+namespace Fabriq\Tests\Unit\Tenancy;
 
 use PHPUnit\Framework\TestCase;
-use SwooleFabric\Tenancy\TenantContext;
-use SwooleFabric\Tenancy\TenantResolver;
-use SwooleFabric\Tenancy\TenantConfigCache;
+use Fabriq\Tenancy\TenantContext;
+use Fabriq\Tenancy\TenantResolver;
+use Fabriq\Tenancy\TenantConfigCache;
 use RuntimeException;
 
 /**

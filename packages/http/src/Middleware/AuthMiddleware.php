@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Http\Middleware;
+namespace Fabriq\Http\Middleware;
 
-use SwooleFabric\Http\Request;
-use SwooleFabric\Http\Response;
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Security\JwtAuthenticator;
-use SwooleFabric\Security\ApiKeyAuthenticator;
+use Fabriq\Http\Request;
+use Fabriq\Http\Response;
+use Fabriq\Kernel\Context;
+use Fabriq\Security\JwtAuthenticator;
+use Fabriq\Security\ApiKeyAuthenticator;
 
 /**
  * Authentication middleware.

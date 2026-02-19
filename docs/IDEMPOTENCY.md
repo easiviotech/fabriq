@@ -1,4 +1,4 @@
-# SwooleFabric — Idempotency & Deduplication
+# Fabriq — Idempotency & Deduplication
 
 ## Concept
 

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Realtime;
+namespace Fabriq\Realtime;
 
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\WebSocket\Server as WsServer;
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Security\JwtAuthenticator;
-use SwooleFabric\Tenancy\TenantResolver;
+use Fabriq\Kernel\Context;
+use Fabriq\Security\JwtAuthenticator;
+use Fabriq\Tenancy\TenantResolver;
 
 /**
  * WebSocket authentication handler.

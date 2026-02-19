@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database - Fabriq Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<aside id="docs-sidebar"></aside>
+<div id="sidebar-overlay"></div>
+<header id="docs-header"></header>
+
+<div id="docs-content">
+    <div id="docs-content-inner" class="docs-content">
+
+        <h1>Database</h1>
+        <p>Fabriq uses coroutine-safe connection pooling for MySQL and Redis, designed for Swoole's long-running, high-concurrency model.</p>
+
+        <!-- ── Architecture ────────────────────────────────────────── -->
+        <h2 id="architecture">Database Architecture</h2>
+
+        <p>Fabriq uses a <strong>dual-database model</strong>:</p>
+
+        <table>
+            <thead>
+                <tr><th>Database</th><th>Purpose</th><th>Tables</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>sf_platform</code></td><td>Shared platform metadata</td><td><code>tenants</code>, <code>api_keys</code>, <code>roles</code>, <code>idempotency_keys</code></td></tr>
+                <tr><td><code>sf_app</code></td><td>Tenant application data</td><td><code>users</code>, <code>rooms</code>, <code>room_members</code>, <code>messages</code></td></tr>
+            </tbody>
+        </table>
+
+        <p><strong>Redis</strong> is used for: queues, events, rate limiting, presence, pub/sub, and caching.</p>
+
+        <h3>Tenancy Strategy</h3>
+
+        <p><strong>Default (v1):</strong> Shared app database with <code>tenant_id</code> enforcement. Every row includes <code>tenant_id</code>, and the repository layer requires <code>TenantContext</code> to be set. If <code>tenant_id</code> is null, a fail-fast <code>RuntimeException</code> is thrown.</p>
+
+        <p><strong>Future (v2):</strong> Optional per-tenant DB or shard-per-group. <code>DbManager::app($dbKey)</code> will accept an optional key for routing, with LRU-managed pool maps for dedicated connections.</p>
+
+        <!-- ── Connection Pools ────────────────────────────────────── -->
+        <h2 id="connection-pools">Connection Pools</h2>
+
+        <p>Every pool is backed by <code>Swoole\Coroutine\Channel</code>:</p>
+
+        <pre><code class="language-text">borrow() → pop from channel (or create new if < max_size)
+           → health-check before returning
+           → if unhealthy: discard, create replacement
+           → if pool full + no idle: block up to borrow_timeout
+
+release() → push back to channel
+           → if channel full: discard connection</code></pre>
+
+        <h3>Pool Parameters</h3>
+
+        <table>
+            <thead>
+                <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>max_size</code></td><td>20</td><td>Maximum connections per pool per worker</td></tr>
+                <tr><td><code>borrow_timeout</code></td><td>3.0s</td><td>Max wait when pool is exhausted</td></tr>
+                <tr><td><code>idle_timeout</code></td><td>60.0s</td><td>Reserved for future idle eviction</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Per-Worker Pools</h3>
+
+        <p>Pools are initialized in <code>onWorkerStart</code> &mdash; <strong>never shared across workers</strong>. Each Swoole worker gets its own pool instances:</p>
+
+        <pre><code class="language-text">Worker 0: [Platform Pool (max 20)] [App Pool (max 20)] [Redis Pool (max 20)]
+Worker 1: [Platform Pool (max 20)] [App Pool (max 20)] [Redis Pool (max 20)]</code></pre>
+
+        <p>Total max connections = <code>workers &times; max_size &times; pool_count</code>.</p>
+
+        <h3>Health Check &amp; Reconnect</h3>
+
+        <p>On every <code>borrow()</code>:</p>
+
+        <ol>
+            <li>Pop connection from channel</li>
+            <li>Execute <code>SELECT 1</code> (MySQL) or <code>PING</code> (Redis)</li>
+            <li>If healthy &rarr; return to caller</li>
+            <li>If unhealthy &rarr; discard, decrement pool size, create fresh connection</li>
+        </ol>
+
+        <!-- ── DbManager ──────────────────────────────────────────── -->
+        <h2 id="dbmanager">Using DbManager</h2>
+
+        <p>The <code>DbManager</code> is the primary interface for database access. Always follow the borrow &rarr; use &rarr; release pattern:</p>
+
+        <pre><code class="language-php">use Fabriq\Storage\DbManager;
+
+// Platform DB
+$conn = $dbManager->platform();
+try {
+    $stmt = $conn->prepare('SELECT * FROM tenants WHERE slug = ?');
+    $rows = $stmt->execute(['acme']);
+} finally {
+    $dbManager->releasePlatform($conn);
+}
+
+// App DB
+$conn = $dbManager->app();
+try {
+    $stmt = $conn->prepare('SELECT * FROM orders WHERE tenant_id = ? ORDER BY created_at DESC');
+    $rows = $stmt->execute([$tenantId]);
+} finally {
+    $dbManager->releaseApp($conn);
+}
+
+// Redis
+$redis = $dbManager->redis();
+try {
+    $redis->set('key', 'value', 300);
+    $value = $redis->get('key');
+} finally {
+    $dbManager->releaseRedis($redis);
+}</code></pre>
+
+        <div class="callout danger">
+            <div class="callout-title">Safety</div>
+            <p>Always <code>release()</code> connections in a <code>finally</code> block. Failing to do so will exhaust the connection pool.</p>
+        </div>
+
+        <!-- ── Transactions ────────────────────────────────────────── -->
+        <h2 id="transactions">Transactions</h2>
+
+        <p>The <code>transaction()</code> method handles begin/commit/rollback and automatic connection release:</p>
+
+        <pre><code class="language-php">$result = $dbManager->transaction('app', function ($conn) use ($tenantId) {
+    $conn->prepare('INSERT INTO orders (id, tenant_id, total) VALUES (?, ?, ?)')
+         ->execute(['order-1', $tenantId, 99.99]);
+
+    $conn->prepare('INSERT INTO order_items (order_id, product_id, qty) VALUES (?, ?, ?)')
+         ->execute(['order-1', 'prod-1', 2]);
+
+    return ['order_id' => 'order-1'];
+});
+// Commits on success, rolls back on exception, always releases the connection.</code></pre>
+
+        <!-- ── TenantAwareRepository ───────────────────────────────── -->
+        <h2 id="repository">TenantAwareRepository</h2>
+
+        <p>Extend <code>TenantAwareRepository</code> for automatic tenant enforcement in all queries:</p>
+
+        <pre><code class="language-php">&lt;?php
+declare(strict_types=1);
+
+namespace App\Repositories;
+
+use Fabriq\Storage\TenantAwareRepository;
+use Fabriq\Storage\DbManager;
+
+final class OrderRepository extends TenantAwareRepository
+{
+    public function __construct(DbManager $db)
+    {
+        parent::__construct($db);
+    }
+
+    public function findByRoom(string $roomId): array
+    {
+        return $this->withAppDb(function ($conn) use ($roomId) {
+            $tenantId = $this->tenantId(); // Throws if no tenant set
+            return $this->execute(
+                $conn,
+                'SELECT * FROM orders WHERE tenant_id = ? AND room_id = ? ORDER BY created_at DESC',
+                [$tenantId, $roomId],
+            );
+        });
+    }
+
+    public function create(array $data): void
+    {
+        $data['tenant_id'] = $this->tenantId();
+        $insert = $this->buildInsert('orders', $data);
+
+        $this->withAppDb(function ($conn) use ($insert) {
+            $this->execute($conn, $insert['sql'], $insert['params']);
+        });
+    }
+}</code></pre>
+
+        <!-- ── Pool Statistics ─────────────────────────────────────── -->
+        <h2 id="pool-stats">Pool Statistics</h2>
+
+        <pre><code class="language-php">$stats = $dbManager->stats();
+// [
+//   'mysql_platform' => ['current_size' => 5, 'max_size' => 20, 'idle' => 3, 'closed' => false],
+//   'mysql_app'      => ['current_size' => 8, 'max_size' => 20, 'idle' => 5, 'closed' => false],
+//   'redis'          => ['current_size' => 4, 'max_size' => 20, 'idle' => 2, 'closed' => false],
+// ]</code></pre>
+
+        <p>Pool statistics are also exposed via the <code>/metrics</code> endpoint as <code>db_pool_in_use</code> and <code>db_pool_waits</code> gauges.</p>
+
+        <!-- ── Safety Rules ────────────────────────────────────────── -->
+        <h2 id="safety-rules">Safety Rules</h2>
+
+        <table>
+            <thead>
+                <tr><th>Rule</th><th>Why</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Always <code>release()</code> in a <code>finally</code> block</td><td>Prevents pool exhaustion</td></tr>
+                <tr><td>Never store a connection in a property</td><td>Connection belongs to the coroutine that borrowed it</td></tr>
+                <tr><td>Never share connections across coroutines</td><td>Swoole coroutine clients are not thread-safe</td></tr>
+                <tr><td>Use <code>TenantAwareRepository</code> for app tables</td><td>Prevents cross-tenant data leaks</td></tr>
+            </tbody>
+        </table>
+
+        <!-- Prev / Next -->
+        <div id="docs-prev-next"></div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-php.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+<script src="assets/docs.js"></script>
+</body>
+</html>
+

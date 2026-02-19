@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Events;
+namespace Fabriq\Events;
 
 /**
  * Event schema — defines the structure of events on the bus.

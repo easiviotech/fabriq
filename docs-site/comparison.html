@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Fabriq? - Fabriq Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<aside id="docs-sidebar"></aside>
+<div id="sidebar-overlay"></div>
+<header id="docs-header"></header>
+
+<div id="docs-content">
+    <div id="docs-content-inner" class="docs-content">
+
+        <h1>Why Fabriq?</h1>
+        <p>The <a href="https://github.com/swoole/awesome-swoole" target="_blank" rel="noopener">Swoole ecosystem</a> has many excellent projects &mdash; from general-purpose frameworks like Hyperf and Swoft to single-purpose libraries for connection pools, MQTT, and gRPC. Fabriq sits in a unique position: a <strong>unified, multi-tenant backend platform</strong> with a Laravel-familiar developer experience &mdash; including built-in live streaming and game server capabilities.</p>
+
+        <!-- ── Unified Runtime ──────────────────────────────────────── -->
+        <h2 id="unified-runtime">Unified Runtime &mdash; Not Just an HTTP Framework</h2>
+
+        <p>Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships <strong>six workloads in a single process</strong> out of the box:</p>
+
+        <table>
+            <thead>
+                <tr><th>Workload</th><th>How It Works in Fabriq</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>HTTP API</strong></td><td>Middleware chain &rarr; Router &rarr; Controllers</td></tr>
+                <tr><td><strong>WebSocket Gateway</strong></td><td>Same port, JWT auth on upgrade, rooms, presence, cross-worker push via Redis Pub/Sub</td></tr>
+                <tr><td><strong>Background Jobs</strong></td><td>Redis Streams, consumer groups, retry with backoff, dead-letter queue</td></tr>
+                <tr><td><strong>Event Bus</strong></td><td>Redis Streams, publish/subscribe, built-in deduplication</td></tr>
+                <tr><td><strong>Live Streaming</strong></td><td>WebRTC signaling (SDP/ICE), FFmpeg transcoding (RTMP &rarr; HLS), viewer tracking, chat moderation</td></tr>
+                <tr><td><strong>Game Server</strong></td><td>Fixed tick-rate game loop, UDP protocol (MessagePack), Redis ZSET matchmaking, lobby system, delta state sync</td></tr>
+            </tbody>
+        </table>
+
+        <p>In Hyperf, for example, you combine <code>hyperf/http-server</code> + <code>hyperf/websocket-server</code> + <code>hyperf/async-queue</code> + <code>hyperf/event</code> &mdash; all from different packages with different paradigms. Fabriq&rsquo;s subsystems are <strong>designed together</strong> and share the same <code>Context</code>, <code>DbManager</code>, and tenant scoping.</p>
+
+        <!-- ── Multi-Tenancy ──────────────────────────────────────────── -->
+        <h2 id="multi-tenancy">First-Class Multi-Tenancy at the Kernel Level</h2>
+
+        <p>This is Fabriq&rsquo;s biggest differentiator. <strong>No Swoole framework in the ecosystem offers built-in multi-tenancy.</strong> In Fabriq, tenancy isn&rsquo;t a plugin &mdash; it&rsquo;s woven into every layer:</p>
+
+        <table>
+            <thead>
+                <tr><th>Component</th><th>What It Does</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>TenantResolver</code></td><td>Configurable chain resolution (host subdomain, <code>X-Tenant</code> header, JWT claim)</td></tr>
+                <tr><td><code>TenantContext</code></td><td>Immutable value object with plan, status, custom domain, per-tenant config overrides</td></tr>
+                <tr><td><code>TenantAwareRepository</code></td><td>Base class that <em>fails fast</em> if <code>tenant_id</code> isn&rsquo;t set &mdash; you cannot write a query that leaks across tenants</td></tr>
+                <tr><td><code>TenantConfigCache</code></td><td>Per-worker in-memory cache with TTL and LRU eviction</td></tr>
+                <tr><td>Context propagation</td><td>When a job or event is dispatched, the <code>tenant_id</code> is automatically serialized into the message and restored by the consumer</td></tr>
+            </tbody>
+        </table>
+
+        <p>Even in the Laravel ecosystem, multi-tenancy requires third-party packages (Tenancy for Laravel, Spatie multitenancy). In Fabriq it&rsquo;s kernel-level &mdash; every HTTP request, WebSocket connection, queue job, and event consumer carries <code>tenant_id</code> through the full lifecycle.</p>
+
+        <!-- ── Context Isolation ───────────────────────────────────────── -->
+        <h2 id="context-isolation">Coroutine-Safe Context Isolation</h2>
+
+        <p>Fabriq&rsquo;s <code>Context</code> class uses <code>Swoole\Coroutine::getContext()</code> to create a per-coroutine state bag:</p>
+
+        <pre><code class="language-php">use Fabriq\Kernel\Context;
+
+// Every execution path gets isolated state:
+Context::tenantId();        // 'tenant-uuid'
+Context::actorId();         // 'user-uuid'
+Context::correlationId();   // 'corr-abc123'
+Context::requestId();       // 'req-def456'</code></pre>
+
+        <p>Most Swoole frameworks have request context, but Fabriq extends this to <strong>every execution path</strong> (HTTP, WS messages, queue jobs, event consumers) with automatic <code>Context::reset()</code> and context propagation across async boundaries. The correlation ID flows from HTTP &rarr; job dispatch &rarr; event emit, enabling end-to-end distributed tracing.</p>
+
+        <!-- ── Idempotency ─────────────────────────────────────────────── -->
+        <h2 id="idempotency">Built-In Idempotency (HTTP, Queues, Events)</h2>
+
+        <p>The Swoole ecosystem has no idempotency library. Fabriq has a dedicated <code>IdempotencyStore</code> with:</p>
+
+        <ul>
+            <li><strong>Redis-first</strong> for speed (SETNX), <strong>DB fallback</strong> for durability</li>
+            <li><strong><code>once()</code> method</strong> &mdash; check-execute-store in one call</li>
+            <li>Used across HTTP (<code>Idempotency-Key</code> header), queue jobs (skip if already processed), and event consumers (dedupe keys with 24h TTL)</li>
+        </ul>
+
+        <pre><code class="language-php">use Fabriq\Queue\IdempotencyStore;
+
+$store = new IdempotencyStore($dbManager);
+
+// Execute a callback at most once per key
+$result = $store->once(
+    key: 'payment-12345',
+    tenantId: Context::tenantId(),
+    callback: fn() => $this->processPayment($paymentId),
+);
+// Second call with same key returns cached result — no double-processing.</code></pre>
+
+        <p>This is critical for financial and SaaS applications and isn&rsquo;t offered by any Swoole framework.</p>
+
+        <!-- ── Policy Engine ───────────────────────────────────────────── -->
+        <h2 id="policy-engine">Hybrid RBAC + ABAC Policy Engine</h2>
+
+        <p>Swoole frameworks typically offer authentication (JWT), but authorization is left to you. Fabriq ships a declarative <code>PolicyEngine</code> with:</p>
+
+        <ul>
+            <li><strong>RBAC</strong> &mdash; define role &rarr; permission mappings (<code>editor: [posts:create, posts:read]</code>)</li>
+            <li><strong>ABAC</strong> &mdash; attribute-based conditions evaluated after RBAC allows (<code>only during business hours</code>)</li>
+            <li><strong>Wildcards</strong> &mdash; <code>rooms:*</code> (all actions), <code>*:*</code> (superuser)</li>
+            <li><strong>Audit logging</strong> &mdash; every decision logged as structured JSON</li>
+        </ul>
+
+        <pre><code class="language-text">RBAC check → if denied → DENY
+           → if allowed → ABAC conditions
+                        → if any fails → DENY
+                        → all pass → ALLOW
+                        → audit log written</code></pre>
+
+        <!-- ── Connection Pool Safety ──────────────────────────────────── -->
+        <h2 id="pool-safety">Connection Pool Safety</h2>
+
+        <p>While libraries like <code>open-smf/connection-pool</code> and SMProxy exist in the ecosystem, Fabriq&rsquo;s <code>ConnectionPool</code> is integrated with strict safety rules designed for long-running processes:</p>
+
+        <table>
+            <thead>
+                <tr><th>Rule</th><th>Implementation</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Per-worker pools</td><td>Initialized in <code>onWorkerStart</code>, never shared across workers</td></tr>
+                <tr><td>Borrow &rarr; use &rarr; release</td><td>Enforced in same coroutine by <code>TenantAwareRepository</code> and <code>DbManager</code></td></tr>
+                <tr><td>Health check on every borrow</td><td><code>SELECT 1</code> (MySQL), <code>PING</code> (Redis)</td></tr>
+                <tr><td>Idle timeout eviction</td><td>Stale connections automatically replaced</td></tr>
+                <tr><td>No pool-per-tenant</td><td>One shared pool with tenant scoping at query level &mdash; prevents connection explosion</td></tr>
+            </tbody>
+        </table>
+
+        <p>This is a deliberate architectural decision. Hyperf&rsquo;s connection pool, for example, doesn&rsquo;t enforce same-coroutine borrow/release or tenant-scoped query isolation.</p>
+
+        <!-- ── Cross-Worker WebSocket ──────────────────────────────────── -->
+        <h2 id="cross-worker-ws">Cross-Worker WebSocket Delivery</h2>
+
+        <p>Fabriq&rsquo;s realtime subsystem handles a hard problem most frameworks punt on: <strong>what happens when user A is on worker 1 and user B is on worker 2?</strong></p>
+
+        <pre><code class="language-text">Worker 1:                              Worker 2:
+  Gateway (fd→user map)                  Gateway (fd→user map)
+       ↑                                      ↑
+       └────────── Redis Pub/Sub ──────────────┘
+                        ↑
+                   PushService
+                 (from any worker)</code></pre>
+
+        <ul>
+            <li><code>PushService</code> publishes to Redis Pub/Sub channels (<code>sf:push:user:{tenantId}:{userId}</code>, <code>sf:push:room:{tenantId}:{roomId}</code>)</li>
+            <li><code>RealtimeSubscriber</code> on each worker listens and delivers to local file descriptors via <code>Gateway</code></li>
+            <li><code>Presence</code> tracking uses Redis Sets for a global view of who&rsquo;s online</li>
+            <li>All of this is <strong>tenant-scoped</strong> &mdash; room memberships, presence sets, and push channels are namespaced by tenant</li>
+        </ul>
+
+        <p>In the Swoole ecosystem, WebSocket tools like Utopia WebSocket handle basic WS, but none offer cross-worker routing with tenant-scoped rooms and presence.</p>
+
+        <!-- ── Laravel-Familiar DX ─────────────────────────────────────── -->
+        <h2 id="laravel-dx">Laravel-Familiar Developer Experience</h2>
+
+        <p>Unlike Hyperf (which mimics Spring Boot / Java annotations), Swoft (also annotation-heavy), or MixPHP (minimal), Fabriq is explicitly designed for <strong>Laravel developers</strong>:</p>
+
+        <table>
+            <thead>
+                <tr><th>Concept</th><th>Fabriq</th><th>Laravel</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Controllers</td><td><code>app/Http/Controllers/</code></td><td><code>app/Http/Controllers/</code></td></tr>
+                <tr><td>Service Providers</td><td><code>app/Providers/</code> with <code>register()</code> / <code>boot()</code></td><td><code>app/Providers/</code> with <code>register()</code> / <code>boot()</code></td></tr>
+                <tr><td>Routes</td><td><code>routes/api.php</code></td><td><code>routes/api.php</code></td></tr>
+                <tr><td>Config</td><td><code>config/*.php</code> returning arrays</td><td><code>config/*.php</code> returning arrays</td></tr>
+                <tr><td>Bootstrap</td><td><code>bootstrap/app.php</code></td><td><code>bootstrap/app.php</code></td></tr>
+                <tr><td>DI Container</td><td><code>bind()</code>, <code>singleton()</code>, <code>instance()</code>, <code>make()</code></td><td><code>bind()</code>, <code>singleton()</code>, <code>instance()</code>, <code>make()</code></td></tr>
+                <tr><td>Middleware</td><td><code>app/Http/Middleware/</code></td><td><code>app/Http/Middleware/</code></td></tr>
+            </tbody>
+        </table>
+
+        <p>A Laravel developer can look at the project structure and immediately understand where everything goes &mdash; something that can&rsquo;t be said for annotation-driven Swoole frameworks.</p>
+
+        <!-- ── Comparison Matrix ───────────────────────────────────────── -->
+        <h2 id="comparison-matrix">Feature Comparison Matrix</h2>
+
+        <p>Here is how Fabriq compares to the major Swoole-based frameworks and Laravel Octane:</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>Hyperf</th>
+                    <th>Laravel Octane</th>
+                    <th>MixPHP</th>
+                    <th><strong>Fabriq</strong></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>HTTP Server</td>
+                    <td>&check;</td>
+                    <td>&check;</td>
+                    <td>&check;</td>
+                    <td><strong>&check;</strong></td>
+                </tr>
+                <tr>
+                    <td>WebSocket (same port)</td>
+                    <td>Separate</td>
+                    <td>&cross;</td>
+                    <td>Plugin</td>
+                    <td><strong>&check; Built-in</strong></td>
+                </tr>
+                <tr>
+                    <td>Cross-worker WS routing</td>
+                    <td>Manual</td>
+                    <td>N/A</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; Redis Pub/Sub</strong></td>
+                </tr>
+                <tr>
+                    <td>Presence tracking</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; Redis Sets</strong></td>
+                </tr>
+                <tr>
+                    <td>Background Jobs</td>
+                    <td>Plugin</td>
+                    <td>Via Laravel</td>
+                    <td>Plugin</td>
+                    <td><strong>&check; Redis Streams</strong></td>
+                </tr>
+                <tr>
+                    <td>Event Bus w/ dedup</td>
+                    <td>&cross;</td>
+                    <td>Via Laravel</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; Built-in</strong></td>
+                </tr>
+                <tr>
+                    <td>Multi-tenancy</td>
+                    <td>&cross;</td>
+                    <td>Plugin</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; Kernel-level</strong></td>
+                </tr>
+                <tr>
+                    <td>Tenant-scoped repos</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; TenantAwareRepository</strong></td>
+                </tr>
+                <tr>
+                    <td>RBAC + ABAC engine</td>
+                    <td>&cross;</td>
+                    <td>Plugin</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; PolicyEngine</strong></td>
+                </tr>
+                <tr>
+                    <td>Idempotency</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; IdempotencyStore</strong></td>
+                </tr>
+                <tr>
+                    <td>Coroutine Context</td>
+                    <td>&check;</td>
+                    <td>Partial</td>
+                    <td>&check;</td>
+                    <td><strong>&check; + propagation</strong></td>
+                </tr>
+                <tr>
+                    <td>Connection pool safety</td>
+                    <td>Basic</td>
+                    <td>Via Swoole</td>
+                    <td>Basic</td>
+                    <td><strong>&check; Health + idle + tenant</strong></td>
+                </tr>
+                <tr>
+                    <td>Laravel-style DX</td>
+                    <td>&cross; (Spring-like)</td>
+                    <td>&check; (is Laravel)</td>
+                    <td>&cross;</td>
+                    <td><strong>&check;</strong></td>
+                </tr>
+                <tr>
+                    <td>Single unified runtime</td>
+                    <td>Partial</td>
+                    <td>&cross; (FPM bridge)</td>
+                    <td>Partial</td>
+                    <td><strong>&check;</strong></td>
+                </tr>
+                <tr>
+                    <td>Live Streaming (WebRTC + HLS)</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; Built-in</strong></td>
+                </tr>
+                <tr>
+                    <td>Game Server Engine</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; Tick loop + matchmaking</strong></td>
+                </tr>
+                <tr>
+                    <td>UDP Protocol Support</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; MessagePack binary</strong></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- ── Summary ─────────────────────────────────────────────────── -->
+        <h2 id="summary">Summary</h2>
+
+        <p>Fabriq is the only Swoole platform that ships <strong>multi-tenancy, realtime, queues, events, idempotency, RBAC+ABAC, live streaming, and a game server engine as a unified, coherent system</strong> &mdash; with a Laravel-familiar developer experience.</p>
+
+        <p>Everything else in the ecosystem requires you to glue together separate packages and handle tenant isolation, cross-worker routing, idempotency, streaming infrastructure, and game server logic yourself.</p>
+
+        <div class="callout tip">
+            <div class="callout-title">Ready to get started?</div>
+            <p>Head to the <a href="index.html">Getting Started</a> guide to set up your first Fabriq project in minutes.</p>
+        </div>
+
+        <!-- Prev / Next -->
+        <div id="docs-prev-next"></div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-php.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+<script src="assets/docs.js"></script>
+</body>
+</html>
+

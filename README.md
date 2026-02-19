@@ -1,4 +1,4 @@
-# SwooleFabric
+# Fabriq
 
 > **Unified Swoole-powered backend platform** — HTTP APIs, WebSocket realtime, background jobs, and event bus with first-class multi-tenancy.
 
@@ -8,7 +8,7 @@
 
 ## Architecture
 
-SwooleFabric is a **long-running Swoole server** that hosts HTTP, WebSocket, queue workers, and event consumers in a single process. Every execution path enforces `TenantContext` — tenant isolation is guaranteed at the kernel level.
+Fabriq is a **long-running Swoole server** that hosts HTTP, WebSocket, queue workers, and event consumers in a single process. Every execution path enforces `TenantContext` — tenant isolation is guaranteed at the kernel level.
 
 ```
 Client → HTTP/WS → Middleware Chain → Route Handler → DB/Redis (tenant-scoped)
@@ -31,11 +31,21 @@ Client → HTTP/WS → Middleware Chain → Route Handler → DB/Redis (tenant-s
 | **Security** | `packages/security/` | JwtAuthenticator, ApiKeyAuthenticator, PolicyEngine (RBAC+ABAC), RateLimiter |
 | **Observability** | `packages/observability/` | Logger (structured JSON), MetricsCollector (Prometheus), TraceContext |
 
-### Example App
+### Application Structure
 
-| App | Path | Description |
-|-----|------|-------------|
-| **example-chat** | `apps/example-chat/` | Multi-tenant chat: rooms, messages, WS push, event pipeline |
+| Directory | Description |
+|-----------|-------------|
+| `app/Http/Controllers/` | HTTP request controllers |
+| `app/Providers/` | Service providers (register + boot lifecycle) |
+| `app/Repositories/` | Data access layer (replaces Eloquent in Swoole context) |
+| `app/Events/` | Domain event classes |
+| `app/Listeners/` | Event listener handlers |
+| `app/Jobs/` | Queued job classes |
+| `app/Realtime/` | WebSocket message handlers |
+| `routes/api.php` | HTTP API route definitions |
+| `routes/channels.php` | WebSocket channel definitions |
+| `config/` | Individual config files (app, server, database, redis, auth, etc.) |
+| `bootstrap/app.php` | Application bootstrap (creates app, registers providers) |
 
 ---
 
@@ -61,12 +71,12 @@ docker compose up -d
 
 ### 2. Start server
 ```bash
-docker exec -it sf-app php bin/swoolefabric serve
+docker exec -it fabriq-app php bin/fabriq serve
 ```
 
 ### 3. Start worker (separate terminal)
 ```bash
-docker exec -it sf-app php bin/swoolefabric worker
+docker exec -it fabriq-app php bin/fabriq worker
 ```
 
 ### 4. Create a tenant
@@ -88,9 +98,9 @@ curl http://localhost:8000/health
 
 | Command | Description |
 |---------|-------------|
-| `bin/swoolefabric serve` | Start HTTP + WS server |
-| `bin/swoolefabric worker` | Start queue consumers |
-| `bin/swoolefabric scheduler` | Start job scheduler |
+| `bin/fabriq serve` | Start HTTP + WS server |
+| `bin/fabriq worker` | Start queue consumers |
+| `bin/fabriq scheduler` | Start job scheduler |
 
 ---
 

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Tests\Unit\Http;
+namespace Fabriq\Tests\Unit\Http;
 
 use PHPUnit\Framework\TestCase;
-use SwooleFabric\Http\Router;
+use Fabriq\Http\Router;
 
 final class RouterTest extends TestCase
 {

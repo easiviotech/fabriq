@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Tests\Unit\Queue;
+namespace Fabriq\Tests\Unit\Queue;
 
 use PHPUnit\Framework\TestCase;
-use SwooleFabric\Events\EventSchema;
+use Fabriq\Events\EventSchema;
 
 /**
  * Tests for IdempotencyStore and EventSchema.

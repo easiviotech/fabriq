@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Tests\Unit\Security;
+namespace Fabriq\Tests\Unit\Security;
 
 use PHPUnit\Framework\TestCase;
-use SwooleFabric\Security\PolicyEngine;
+use Fabriq\Security\PolicyEngine;
 
 final class PolicyEngineTest extends TestCase
 {

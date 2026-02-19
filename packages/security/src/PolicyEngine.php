@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Security;
+namespace Fabriq\Security;
 
 /**
  * PolicyEngine — evaluates RBAC + ABAC rules.

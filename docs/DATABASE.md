@@ -1,8 +1,8 @@
-# SwooleFabric — Database Architecture
+# Fabriq — Database Architecture
 
 ## Overview
 
-SwooleFabric uses coroutine-safe connection pooling for both MySQL and Redis, designed for Swoole's long-running, high-concurrency model.
+Fabriq uses coroutine-safe connection pooling for both MySQL and Redis, designed for Swoole's long-running, high-concurrency model.
 
 ## Connection Pool Design
 
@@ -46,7 +46,7 @@ Total max connections = `workers × max_size × pool_count`.
 | Database | Purpose | Tables |
 |----------|---------|--------|
 | `sf_platform` | Shared platform metadata | `tenants`, `api_keys`, `roles`, `idempotency_keys` |
-| `sf_app` | Tenant application data | `users`, `rooms`, `room_members`, `messages` |
+| `sf_app` | Tenant application data | `users`, `rooms`, `room_members`, `messages`, `streams` |
 
 ### Tenancy Strategy (Hybrid)
 

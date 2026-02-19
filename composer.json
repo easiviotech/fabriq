@@ -1,6 +1,6 @@
 {
-    "name": "fabrq/swoolefabric",
-    "description": "SwooleFabric — Unified Swoole-powered backend platform with multi-tenancy, realtime, queue, events, security, and observability.",
+    "name": "fabrq/fabriq",
+    "description": "Fabriq — Unified Swoole-powered backend platform with multi-tenancy, realtime, queue, events, security, streaming, gaming, and observability.",
     "type": "project",
     "license": "proprietary",
     "minimum-stability": "stable",
@@ -9,28 +9,31 @@
         "php": ">=8.2",
         "ext-swoole": "*",
         "ext-json": "*",
-        "ext-mbstring": "*"
+        "ext-mbstring": "*",
+        "rybakit/msgpack": "^0.9"
     },
     "require-dev": {
         "phpunit/phpunit": "^10.5"
     },
     "autoload": {
         "psr-4": {
-            "SwooleFabric\\Kernel\\": "packages/kernel/src/",
-            "SwooleFabric\\Tenancy\\": "packages/tenancy/src/",
-            "SwooleFabric\\Storage\\": "packages/storage/src/",
-            "SwooleFabric\\Http\\": "packages/http/src/",
-            "SwooleFabric\\Realtime\\": "packages/realtime/src/",
-            "SwooleFabric\\Queue\\": "packages/queue/src/",
-            "SwooleFabric\\Events\\": "packages/events/src/",
-            "SwooleFabric\\Security\\": "packages/security/src/",
-            "SwooleFabric\\Observability\\": "packages/observability/src/",
-            "SwooleFabric\\ExampleChat\\": "apps/example-chat/"
+            "App\\": "app/",
+            "Fabriq\\Kernel\\": "packages/kernel/src/",
+            "Fabriq\\Tenancy\\": "packages/tenancy/src/",
+            "Fabriq\\Storage\\": "packages/storage/src/",
+            "Fabriq\\Http\\": "packages/http/src/",
+            "Fabriq\\Realtime\\": "packages/realtime/src/",
+            "Fabriq\\Queue\\": "packages/queue/src/",
+            "Fabriq\\Events\\": "packages/events/src/",
+            "Fabriq\\Security\\": "packages/security/src/",
+            "Fabriq\\Observability\\": "packages/observability/src/",
+            "Fabriq\\Streaming\\": "packages/streaming/src/",
+            "Fabriq\\Gaming\\": "packages/gaming/src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "SwooleFabric\\Tests\\": "tests/"
+            "Fabriq\\Tests\\": "tests/"
         }
     },
     "scripts": {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Kernel;
+namespace Fabriq\Kernel;
 
 use Swoole\Coroutine;
 
@@ -15,7 +15,7 @@ use Swoole\Coroutine;
  */
 final class Context
 {
-    private const KEY = '__swoolefabric_ctx';
+    private const KEY = '__fabriq_ctx';
 
     // ── Factory ──────────────────────────────────────────────────────
 

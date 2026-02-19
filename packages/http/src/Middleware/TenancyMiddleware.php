@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Http\Middleware;
+namespace Fabriq\Http\Middleware;
 
-use SwooleFabric\Http\Request;
-use SwooleFabric\Http\Response;
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Tenancy\TenantResolver;
+use Fabriq\Http\Request;
+use Fabriq\Http\Response;
+use Fabriq\Kernel\Context;
+use Fabriq\Tenancy\TenantResolver;
 
 /**
  * Tenancy middleware.

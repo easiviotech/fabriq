@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\Tests\Unit\Kernel;
+namespace Fabriq\Tests\Unit\Kernel;
 
 use PHPUnit\Framework\TestCase;
-use SwooleFabric\Kernel\Config;
+use Fabriq\Kernel\Config;
 
 final class ConfigTest extends TestCase
 {

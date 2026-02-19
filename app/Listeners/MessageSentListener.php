@@ -2,21 +2,22 @@
 
 declare(strict_types=1);
 
-namespace SwooleFabric\ExampleChat;
+namespace App\Listeners;
 
-use SwooleFabric\Events\EventSchema;
-use SwooleFabric\Observability\Logger;
+use Fabriq\Events\EventSchema;
+use Fabriq\Observability\Logger;
+use App\Repositories\ChatRepository;
 
 /**
- * Event consumer handler for MessageSent events.
+ * Event listener for message.sent events.
  *
- * Processes message.sent events:
+ * Processes MessageSent events:
  *   - Updates room message counters
  *   - Could update projections, search indices, notifications, etc.
  *
- * Registered with EventConsumer in the worker bootstrap.
+ * Registered with EventConsumer via the EventServiceProvider.
  */
-final class MessageSentHandler
+final class MessageSentListener
 {
     /** @var array<string, int> roomId → message count (in-memory projection) */
     private array $counters = [];

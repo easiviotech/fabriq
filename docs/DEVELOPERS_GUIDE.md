@@ -1,13 +1,14 @@
-# SwooleFabric — Developer's Guide
+# Fabriq — Developer's Guide
 
 > Build multi-tenant, real-time backend applications on a unified Swoole runtime.
 
-This guide walks you through building a production backend on SwooleFabric. By the end you will know how to create a project, define routes, add middleware, work with tenancy, push real-time messages, dispatch background jobs, emit events, and observe your application — all within a single long-running PHP process.
+This guide walks you through building a production backend on Fabriq. By the end you will know how to create a project, define routes, add middleware, work with tenancy, push real-time messages, dispatch background jobs, emit events, and observe your application — all within a single long-running PHP process.
 
 ---
 
 ## Table of Contents
 
+0. [Why Fabriq?](#0-why-fabriq)
 1. [Getting Started](#1-getting-started)
 2. [Project Structure](#2-project-structure)
 3. [Configuration](#3-configuration)
@@ -25,9 +26,121 @@ This guide walks you through building a production backend on SwooleFabric. By t
 15. [Scheduled Jobs](#15-scheduled-jobs)
 16. [Observability](#16-observability)
 17. [Context — The Coroutine-Local Bag](#17-context--the-coroutine-local-bag)
-18. [Testing](#18-testing)
-19. [Deployment](#19-deployment)
-20. [Full Example — Building a Todo API](#20-full-example--building-a-todo-api)
+18. [Live Streaming](#18-live-streaming)
+19. [Game Server](#19-game-server)
+20. [Testing](#20-testing)
+21. [Deployment](#21-deployment)
+22. [Full Example — Building a Todo API](#22-full-example--building-a-todo-api)
+
+---
+
+## 0. Why Fabriq?
+
+The [Swoole ecosystem](https://github.com/swoole/awesome-swoole) has many excellent projects — from general-purpose frameworks like Hyperf and Swoft to single-purpose libraries for connection pools, MQTT, and gRPC. Fabriq sits in a unique position: a **unified, multi-tenant backend platform** with a Laravel-familiar developer experience.
+
+### Unified Runtime — Not Just an HTTP Framework
+
+Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships **six workloads in a single process** out of the box:
+
+| Workload | How It Works in Fabriq |
+|---|---|
+| **HTTP API** | Middleware chain → Router → Controllers |
+| **WebSocket Gateway** | Same port, JWT auth on upgrade, rooms, presence, cross-worker push via Redis Pub/Sub |
+| **Background Jobs** | Redis Streams, consumer groups, retry with backoff, dead-letter queue |
+| **Event Bus** | Redis Streams, publish/subscribe, built-in deduplication |
+| **Live Streaming** | WebRTC signaling (SDP/ICE), FFmpeg transcoding (RTMP → HLS), viewer tracking, chat moderation |
+| **Game Server** | Fixed tick-rate game loop, UDP protocol (MessagePack), Redis ZSET matchmaking, lobby system, delta state sync |
+
+In Hyperf, for example, you combine `hyperf/http-server` + `hyperf/websocket-server` + `hyperf/async-queue` + `hyperf/event` — all from different packages with different paradigms. Fabriq's subsystems are **designed together** and share the same `Context`, `DbManager`, and tenant scoping.
+
+### First-Class Multi-Tenancy at the Kernel Level
+
+This is Fabriq's biggest differentiator. **No Swoole framework in the ecosystem offers built-in multi-tenancy.** In Fabriq, tenancy isn't a plugin — it's woven into every layer:
+
+| Component | What It Does |
+|---|---|
+| `TenantResolver` | Configurable chain resolution (host subdomain, `X-Tenant` header, JWT claim) |
+| `TenantContext` | Immutable value object with plan, status, custom domain, per-tenant config overrides |
+| `TenantAwareRepository` | Base class that *fails fast* if `tenant_id` isn't set — you cannot write a query that leaks across tenants |
+| `TenantConfigCache` | Per-worker in-memory cache with TTL and LRU eviction |
+| Context propagation | When a job or event is dispatched, `tenant_id` is automatically serialized into the message and restored by the consumer |
+
+Even in the Laravel ecosystem, multi-tenancy requires third-party packages (Tenancy for Laravel, Spatie multitenancy). In Fabriq it's kernel-level — every HTTP request, WebSocket connection, queue job, and event consumer carries `tenant_id` through the full lifecycle.
+
+### Coroutine-Safe Context Isolation
+
+Fabriq's `Context` class uses `Swoole\Coroutine::getContext()` to create a per-coroutine state bag. Most Swoole frameworks have request context, but Fabriq extends this to **every execution path** (HTTP, WS messages, queue jobs, event consumers) with automatic `Context::reset()` and context propagation across async boundaries. The correlation ID flows from HTTP → job dispatch → event emit, enabling end-to-end distributed tracing.
+
+### Built-In Idempotency (HTTP, Queues, Events)
+
+The Swoole ecosystem has no idempotency library. Fabriq has a dedicated `IdempotencyStore` with:
+
+- **Redis-first** for speed (SETNX), **DB fallback** for durability
+- **`once()` method** — check-execute-store in one call
+- Used across HTTP (`Idempotency-Key` header), queue jobs (skip if already processed), and event consumers (dedupe keys with 24h TTL)
+
+This is critical for financial and SaaS applications and isn't offered by any Swoole framework.
+
+### Hybrid RBAC + ABAC Policy Engine
+
+Swoole frameworks typically offer authentication (JWT), but authorization is left to you. Fabriq ships a declarative `PolicyEngine` with RBAC role → permission mappings, ABAC attribute-based conditions, wildcards (`rooms:*`, `*:*`), and full audit logging.
+
+### Connection Pool Safety
+
+Fabriq's `ConnectionPool` is integrated with strict safety rules designed for long-running processes:
+
+- **Per-worker pools** — initialized in `onWorkerStart`, never shared across workers
+- **Borrow → use → release** — enforced in same coroutine by `TenantAwareRepository` and `DbManager`
+- **Health check on every borrow** — `SELECT 1` (MySQL), `PING` (Redis)
+- **Idle timeout eviction** — stale connections automatically replaced
+- **No pool-per-tenant** — one shared pool with tenant scoping at query level, preventing connection explosion
+
+### Cross-Worker WebSocket Delivery
+
+Fabriq's realtime subsystem handles a hard problem most frameworks punt on: what happens when user A is on worker 1 and user B is on worker 2?
+
+- `PushService` publishes to Redis Pub/Sub channels (`sf:push:user:{tenantId}:{userId}`, `sf:push:room:{tenantId}:{roomId}`)
+- `RealtimeSubscriber` on each worker listens and delivers to local file descriptors via `Gateway`
+- `Presence` tracking uses Redis Sets for a global view of who's online
+- All of this is **tenant-scoped** — room memberships, presence sets, and push channels are namespaced by tenant
+
+### Laravel-Familiar Developer Experience
+
+Unlike Hyperf (Spring Boot / Java annotations), Swoft (annotation-heavy), or MixPHP (minimal), Fabriq is explicitly designed for **Laravel developers**:
+
+| Concept | Fabriq | Laravel |
+|---|---|---|
+| Controllers | `app/Http/Controllers/` | `app/Http/Controllers/` |
+| Service Providers | `app/Providers/` with `register()` / `boot()` | `app/Providers/` with `register()` / `boot()` |
+| Routes | `routes/api.php` | `routes/api.php` |
+| Config | `config/*.php` returning arrays | `config/*.php` returning arrays |
+| Bootstrap | `bootstrap/app.php` | `bootstrap/app.php` |
+| DI Container | `bind()`, `singleton()`, `instance()`, `make()` | `bind()`, `singleton()`, `instance()`, `make()` |
+| Middleware | `app/Http/Middleware/` | `app/Http/Middleware/` |
+
+### Feature Comparison Matrix
+
+| Feature | Hyperf | Laravel Octane | MixPHP | **Fabriq** |
+|---|---|---|---|---|
+| HTTP Server | ✅ | ✅ | ✅ | **✅** |
+| WebSocket (same port) | Separate | ❌ | Plugin | **✅ Built-in** |
+| Cross-worker WS routing | Manual | N/A | ❌ | **✅ Redis Pub/Sub** |
+| Presence tracking | ❌ | ❌ | ❌ | **✅ Redis Sets** |
+| Background Jobs | Plugin | Via Laravel | Plugin | **✅ Redis Streams** |
+| Event Bus w/ dedup | ❌ | Via Laravel | ❌ | **✅ Built-in** |
+| Multi-tenancy | ❌ | Plugin | ❌ | **✅ Kernel-level** |
+| Tenant-scoped repos | ❌ | ❌ | ❌ | **✅ TenantAwareRepository** |
+| RBAC + ABAC engine | ❌ | Plugin | ❌ | **✅ PolicyEngine** |
+| Idempotency | ❌ | ❌ | ❌ | **✅ IdempotencyStore** |
+| Coroutine Context | ✅ | Partial | ✅ | **✅ + propagation** |
+| Connection pool safety | Basic | Via Swoole | Basic | **✅ Health + idle + tenant** |
+| Laravel-style DX | ❌ (Spring-like) | ✅ (is Laravel) | ❌ | **✅** |
+| Single unified runtime | Partial | ❌ (FPM bridge) | Partial | **✅** |
+| Live Streaming (WebRTC + HLS) | ❌ | ❌ | ❌ | **✅ Built-in** |
+| Game Server (tick loop + matchmaking) | ❌ | ❌ | ❌ | **✅ Built-in** |
+| UDP Protocol (MessagePack) | ❌ | ❌ | ❌ | **✅ Built-in** |
+
+**In short:** Fabriq is the only Swoole platform that ships multi-tenancy, realtime, queues, events, idempotency, RBAC+ABAC, **live streaming, and a game server engine** as a **unified, coherent system** — with a Laravel-familiar developer experience.
 
 ---
 
@@ -43,6 +156,161 @@ This guide walks you through building a production backend on SwooleFabric. By t
 | Redis | 7.x |
 | Docker + Compose (recommended) | v2 |
 
+### Installation
+
+Fabriq runs on PHP with the Swoole extension. Below are instructions for installing both on common platforms.
+
+#### 1. Install PHP 8.2+
+
+**Ubuntu / Debian:**
+
+```bash
+sudo apt update
+sudo apt install -y software-properties-common
+sudo add-apt-repository ppa:ondrej/php
+sudo apt update
+sudo apt install -y php8.3-cli php8.3-dev php8.3-curl php8.3-mbstring php8.3-xml php8.3-zip php8.3-mysql
+```
+
+**macOS (Homebrew):**
+
+```bash
+brew install php@8.3
+# Ensure it's on your PATH
+echo 'export PATH="/opt/homebrew/opt/php@8.3/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Windows:**
+
+```bash
+# Option 1: Download from https://windows.php.net/download
+# Extract to C:\php and add to your System PATH
+
+# Option 2: Using Chocolatey
+choco install php --version=8.3
+
+# Option 3: Using Scoop
+scoop install php
+```
+
+Verify:
+
+```bash
+php -v
+# PHP 8.3.x (cli) ...
+```
+
+#### 2. Install the Swoole Extension
+
+Swoole is a high-performance coroutine-based PHP extension that powers Fabriq's async HTTP server, WebSockets, connection pools, and background workers — all in a single long-running process.
+
+**Via PECL (Linux / macOS):**
+
+```bash
+# Install build dependencies (Ubuntu/Debian)
+sudo apt install -y php8.3-dev gcc make libcurl4-openssl-dev libssl-dev
+
+# Install Swoole
+sudo pecl install swoole
+
+# Enable the extension
+echo "extension=swoole" | sudo tee /etc/php/8.3/cli/conf.d/20-swoole.ini
+
+# Verify
+php -m | grep swoole
+php --ri swoole
+```
+
+> **PECL Prompts:** During `pecl install swoole` you'll be asked about optional features. Recommended answers for Fabriq:
+> - **enable sockets support?** → `yes`
+> - **enable openssl support?** → `yes`
+> - **enable http2 support?** → `yes`
+> - **enable curl support?** → `yes`
+> - **enable mysqlnd support?** → `yes`
+
+**Via Docker (Recommended for Production):**
+
+The included `infra/Dockerfile` already handles everything:
+
+```dockerfile
+FROM php:8.3-cli
+
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev libssl-dev unzip git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Swoole
+RUN pecl install swoole-5.1.5 \
+    && docker-php-ext-enable swoole
+
+# Install PDO MySQL
+RUN docker-php-ext-install pdo pdo_mysql
+
+# Install Redis extension
+RUN pecl install redis \
+    && docker-php-ext-enable redis
+
+# Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+```
+
+**Compiling from Source (Advanced):**
+
+```bash
+git clone https://github.com/swoole/swoole-src.git
+cd swoole-src
+git checkout v5.1.5
+
+phpize
+./configure \
+    --enable-openssl \
+    --enable-http2 \
+    --enable-sockets \
+    --enable-mysqlnd
+make -j$(nproc)
+sudo make install
+
+echo "extension=swoole" | sudo tee /etc/php/8.3/cli/conf.d/20-swoole.ini
+```
+
+#### 3. Verify Your Environment
+
+```bash
+# Check PHP version (must be >= 8.2)
+php -v
+
+# Check Swoole is loaded
+php -m | grep swoole
+
+# Check Swoole version details
+php --ri swoole | head -5
+
+# Quick smoke test — starts and immediately shuts down a Swoole HTTP server
+php -r "
+\$server = new Swoole\Http\Server('127.0.0.1', 0);
+\$server->on('request', function() {});
+echo 'Swoole ' . swoole_version() . ' is working!' . PHP_EOL;
+"
+```
+
+> **Important:** Swoole replaces PHP's traditional request lifecycle. Do **not** install it on a server already running php-fpm for other projects unless you understand the implications. Use Docker or a dedicated VM/container.
+
+#### 4. Install Project Dependencies
+
+Once PHP and Swoole are ready, install Composer and the project:
+
+```bash
+# Install Composer (if not already installed)
+curl -sS https://getcomposer.org/installer | php
+sudo mv composer.phar /usr/local/bin/composer
+
+# Install Fabriq dependencies
+cd myapp
+composer install
+```
+
 ### Quick Start (Docker)
 
 ```bash
@@ -55,7 +323,7 @@ docker compose up -d
 
 # The server is now running on http://localhost:8000
 curl http://localhost:8000/health
-# → {"status":"ok","service":"swoolefabric","timestamp":1740000000,...}
+# → {"status":"ok","service":"Fabriq","timestamp":1740000000,...}
 ```
 
 ### Quick Start (Local)
@@ -64,25 +332,25 @@ curl http://localhost:8000/health
 composer install
 
 # Start the HTTP + WebSocket server
-php bin/swoolefabric serve
+php bin/fabriq serve
 
 # In another terminal — start the queue worker
-php bin/swoolefabric worker
+php bin/fabriq worker
 
 # In another terminal — start the scheduler (optional)
-php bin/swoolefabric scheduler
+php bin/fabriq scheduler
 ```
 
 ### CLI Commands
 
 | Command | Description |
 |---|---|
-| `php bin/swoolefabric serve [config]` | Start HTTP + WebSocket server |
-| `php bin/swoolefabric worker [config]` | Start queue consumer workers |
-| `php bin/swoolefabric scheduler [config]` | Start the cron-like job scheduler |
-| `php bin/swoolefabric help` | Show help |
+| `php bin/fabriq serve [config]` | Start HTTP + WebSocket server |
+| `php bin/fabriq worker [config]` | Start queue consumer workers |
+| `php bin/fabriq scheduler [config]` | Start the cron-like job scheduler |
+| `php bin/fabriq help` | Show help |
 
-The optional `[config]` argument defaults to `config/default.php`.
+Configuration is loaded automatically from the `config/` directory. Each file (e.g. `config/server.php`, `config/database.php`) returns an array and is accessible via dot notation.
 
 ---
 
@@ -90,25 +358,42 @@ The optional `[config]` argument defaults to `config/default.php`.
 
 ```
 myapp/
-├── apps/                          # Your application code
-│   └── my-api/
-│       ├── Routes.php             # HTTP route definitions
-│       ├── WsHandler.php          # WebSocket message handler
-│       ├── Repository.php         # Data access (tenant-scoped)
-│       └── EventHandlers.php      # Event consumer handlers
+├── app/                           # Your application code
+│   ├── Http/
+│   │   ├── Controllers/           # HTTP request controllers
+│   │   └── Middleware/            # Custom middleware
+│   ├── Providers/                 # Service providers (register + boot)
+│   ├── Repositories/              # Data access layer
+│   ├── Events/                    # Domain event classes
+│   ├── Listeners/                 # Event listener handlers
+│   ├── Jobs/                      # Queued job classes
+│   └── Realtime/                  # WebSocket message handlers
 ├── bin/
-│   └── swoolefabric               # CLI entry point
+│   └── fabriq                     # CLI entry point
+├── bootstrap/
+│   └── app.php                    # Application bootstrap
 ├── config/
-│   ├── default.php                # Base configuration
-│   ├── bootstrap.php              # Application bootstrap (wires everything)
-│   ├── worker_bootstrap.php       # Queue job handler registration
-│   ├── event_bootstrap.php        # Event handler registration
-│   └── scheduler_bootstrap.php    # Scheduled job registration
+│   ├── app.php                    # App name + service providers list
+│   ├── server.php                 # Swoole server host, port, workers
+│   ├── database.php               # MySQL connection pools
+│   ├── redis.php                  # Redis connection settings
+│   ├── auth.php                   # JWT + RBAC roles
+│   ├── tenancy.php                # Resolver chain + cache TTL
+│   ├── queue.php                  # Queue consumer groups + retry
+│   ├── events.php                 # Event consumer groups
+│   ├── observability.php          # Log level
+│   ├── streaming.php              # FFmpeg, HLS, chat moderation
+│   └── gaming.php                 # Tick rates, matchmaking, UDP
+├── routes/
+│   ├── api.php                    # HTTP API route definitions
+│   └── channels.php               # WebSocket channel definitions
+├── database/
+│   └── migrations/                # SQL migration files
 ├── infra/
 │   ├── Dockerfile
 │   ├── docker-compose.yml
 │   └── mysql/init.sql
-├── packages/                      # Framework packages (you extend these)
+├── packages/                      # Framework packages
 │   ├── kernel/                    # Application, Server, Config, Container, Context
 │   ├── http/                      # Router, Request, Response, Middleware, Validator
 │   ├── tenancy/                   # TenantResolver, TenantContext, Cache
@@ -117,20 +402,23 @@ myapp/
 │   ├── queue/                     # Dispatcher, Consumer, Scheduler, Idempotency
 │   ├── events/                    # EventBus, EventConsumer, EventSchema
 │   ├── security/                  # JWT, API Keys, PolicyEngine, RateLimiter
-│   └── observability/             # Logger, MetricsCollector, TraceContext
+│   ├── observability/             # Logger, MetricsCollector, TraceContext
+│   ├── streaming/                 # StreamManager, Signaling, HLS, Transcoding
+│   └── gaming/                    # GameLoop, Rooms, Matchmaker, UDP Protocol
+├── tests/
 ├── composer.json
 └── phpunit.xml
 ```
 
-**Key convention:** Your application code lives in `apps/`. The framework lives in `packages/`. The `config/` directory contains bootstrap files that wire them together.
+**Key convention:** Your application code lives in `app/` (PSR-4 namespace `App\`). The framework lives in `packages/`. Service providers in `app/Providers/` wire everything together via a register → boot lifecycle.
 
-Register your app namespace in `composer.json`:
+The `App\` namespace is already registered in `composer.json`:
 
 ```json
 {
     "autoload": {
         "psr-4": {
-            "MyApp\\": "apps/my-api/"
+            "App\\": "app/"
         }
     }
 }
@@ -140,85 +428,57 @@ Register your app namespace in `composer.json`:
 
 ## 3. Configuration
 
-Configuration is a PHP file that returns an associative array. Values are accessed with dot-notation.
+Configuration in Fabriq follows a convention familiar to Laravel developers: each concern lives in its own PHP file inside the `config/` directory. At boot time, `Config::fromDirectory()` loads every `.php` file. The filename becomes the top-level key.
 
-### `config/default.php`
+| File | Top-Level Key | Description |
+|---|---|---|
+| `config/app.php` | `app.*` | Application name & service providers list |
+| `config/server.php` | `server.*` | Swoole host, port, workers |
+| `config/database.php` | `database.*` | MySQL connection pools (platform + app) |
+| `config/redis.php` | `redis.*` | Redis connection settings |
+| `config/auth.php` | `auth.*` | JWT settings + RBAC role definitions |
+| `config/tenancy.php` | `tenancy.*` | Resolver chain + cache TTL |
+| `config/queue.php` | `queue.*` | Queue consumer group + retry policy |
+| `config/events.php` | `events.*` | Event consumer group |
+| `config/observability.php` | `observability.*` | Log level |
+| `config/streaming.php` | `streaming.*` | FFmpeg, HLS, chat moderation |
+| `config/gaming.php` | `gaming.*` | Tick rates, matchmaking, UDP protocol |
+
+### `config/server.php`
 
 ```php
 <?php
 declare(strict_types=1);
 
 return [
-    'server' => [
-        'host'         => '0.0.0.0',
-        'port'         => 8000,
-        'workers'      => 4,        // Swoole worker processes
-        'task_workers'  => 2,
-        'log_level'    => 4,        // SWOOLE_LOG_WARNING
-    ],
+    'host'         => '0.0.0.0',
+    'port'         => 8000,
+    'workers'      => 2,
+    'task_workers' => 2,
+    'log_level'    => 4,  // SWOOLE_LOG_WARNING
+];
+```
 
-    'database' => [
-        'platform' => [             // Shared tables: tenants, api_keys, roles
-            'host'     => 'mysql',
-            'port'     => 3306,
-            'database' => 'sf_platform',
-            'username' => 'swoolefabric',
-            'password' => 'sfpass',
-            'charset'  => 'utf8mb4',
-            'pool'     => ['max_size' => 20, 'borrow_timeout' => 3.0, 'idle_timeout' => 60.0],
-        ],
-        'app' => [                  // Tenant-scoped tables: users, orders, etc.
-            'host'     => 'mysql',
-            'port'     => 3306,
-            'database' => 'sf_app',
-            'username' => 'swoolefabric',
-            'password' => 'sfpass',
-            'charset'  => 'utf8mb4',
-            'pool'     => ['max_size' => 20, 'borrow_timeout' => 3.0, 'idle_timeout' => 60.0],
-        ],
-    ],
+### `config/app.php`
 
-    'redis' => [
-        'host'     => 'redis',
-        'port'     => 6379,
-        'password' => '',
-        'database' => 0,
-        'pool'     => ['max_size' => 20],
-    ],
+```php
+<?php
+declare(strict_types=1);
 
-    'auth' => [
-        'jwt' => [
-            'secret'    => 'change-me-in-production',
-            'algorithm' => 'HS256',
-            'ttl'       => 3600,
-        ],
-    ],
+return [
+    'name' => 'Fabriq',
 
-    'tenancy' => [
-        'resolver_chain' => ['host', 'header', 'token'],
-        'cache_ttl'      => 300,
-    ],
-
-    'queue' => [
-        'consumer_group' => 'sf_workers',
-        'retry'          => ['max_attempts' => 3, 'backoff' => [1, 5, 30]],
-    ],
-
-    'events' => [
-        'consumer_group' => 'sf_consumers',
-    ],
-
-    'rate_limit' => [
-        'default' => ['max_requests' => 100, 'window' => 60],
-    ],
-
-    'observability' => [
-        'log_level' => 'info',
+    'providers' => [
+        \App\Providers\AppServiceProvider::class,
+        \App\Providers\AuthServiceProvider::class,
+        \App\Providers\RouteServiceProvider::class,
+        \App\Providers\EventServiceProvider::class,
+        \App\Providers\RealtimeServiceProvider::class,
     ],
 ];
 ```
 
-Access in code:
+### Dot-Notation Access
 
 ```php
 $host = $config->get('server.host');              // '0.0.0.0'
@@ -226,155 +486,84 @@ $poolSize = $config->get('database.app.pool.max_size'); // 20
 $missing = $config->get('foo.bar', 'default');    // 'default'
 ```
 
-Create environment-specific overrides by passing a different config file:
-
-```bash
-php bin/swoolefabric serve config/production.php
-```
+Use environment variables via `getenv()` in production config files to keep secrets out of version control.
 
 ---
 
 ## 4. Bootstrap — Wiring Your Application
 
-The **bootstrap file** is where you wire your application into SwooleFabric. It is a PHP file that returns a closure receiving the `Application` instance.
+The **bootstrap file** (`bootstrap/app.php`) creates the Application instance, registers service providers from `config/app.php`, and boots them. This is the single entry point that wires everything together.
 
-### `config/bootstrap.php`
+### `bootstrap/app.php`
 
 ```php
 <?php
 declare(strict_types=1);
 
-use SwooleFabric\Kernel\Application;
-use SwooleFabric\Kernel\Container;
-use SwooleFabric\Http\Router;
-use SwooleFabric\Http\Request;
-use SwooleFabric\Http\Response;
-use SwooleFabric\Http\MiddlewareChain;
-use SwooleFabric\Http\Middleware\CorrelationMiddleware;
-use SwooleFabric\Http\Middleware\AuthMiddleware;
-use SwooleFabric\Http\Middleware\TenancyMiddleware;
-use SwooleFabric\Security\JwtAuthenticator;
-use SwooleFabric\Security\ApiKeyAuthenticator;
-use SwooleFabric\Tenancy\TenantResolver;
-use SwooleFabric\Tenancy\TenantContext;
-use SwooleFabric\Tenancy\TenantConfigCache;
-use SwooleFabric\Storage\DbManager;
-use SwooleFabric\Realtime\Gateway;
-use SwooleFabric\Events\EventBus;
-use SwooleFabric\Queue\Dispatcher;
-use MyApp\Routes;
+use Fabriq\Kernel\Application;
 
-return function (Application $app): void {
-    $config    = $app->config();
-    $container = $app->container();
-    $server    = $app->server();
+// Create the Application (loads all config/*.php files automatically)
+$app = new Application(
+    basePath: dirname(__DIR__),
+);
 
-    // ── 1. Create core services ──────────────────────────────────
+// Register all providers listed in config/app.php 'providers' array
+$app->registerConfiguredProviders();
+$app->boot();
 
-    $jwt = new JwtAuthenticator(
-        secret: $config->get('auth.jwt.secret', 'change-me'),
-        defaultTtl: (int) $config->get('auth.jwt.ttl', 3600),
-    );
-    $container->instance(JwtAuthenticator::class, $jwt);
+return $app;
+```
 
-    // ── 2. Tenant resolution ─────────────────────────────────────
+### Writing a Service Provider
 
-    $tenantCache = new TenantConfigCache(
-        ttl: (float) $config->get('tenancy.cache_ttl', 300),
-    );
+Service providers follow the same register → boot lifecycle as Laravel. Place them in `app/Providers/`:
 
-    $tenantResolver = new TenantResolver(
-        chain: $config->get('tenancy.resolver_chain', ['header', 'host', 'token']),
-        lookup: function (string $type, string $value) use ($tenantCache): ?TenantContext {
-            // Check cache
-            $cached = $tenantCache->get("{$type}:{$value}");
-            if ($cached !== null) return $cached;
+```php
+<?php
+declare(strict_types=1);
 
-            // Query your tenant table here (see §11 for DB access patterns)
-            // $row = query tenants table WHERE $type = $value ...
-            // if ($row === null) return null;
-            // $tenant = TenantContext::fromArray($row);
-            // $tenantCache->put($tenant);
-            // return $tenant;
+namespace App\Providers;
 
-            return null;
-        },
-    );
-    $container->instance(TenantResolver::class, $tenantResolver);
+use Fabriq\Kernel\ServiceProvider;
+use Fabriq\Http\Router;
 
-    // ── 3. HTTP Router ───────────────────────────────────────────
+final class RouteServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        // Bind the Router into the container
+        $router = new Router();
+        $this->app->container()->instance(Router::class, $router);
+    }
 
-    $router = new Router();
-    $container->instance(Router::class, $router);
+    public function boot(): void
+    {
+        // Load route definitions (all providers have been registered)
+        $router = $this->app->container()->make(Router::class);
 
-    $routes = new Routes();
-    $routes->register($router);
+        $routeFile = $this->app->routesPath('api.php');
+        if (is_file($routeFile)) {
+            (require $routeFile)($router, $this->app);
+        }
 
-    // ── 4. Middleware chain ──────────────────────────────────────
-
-    $apiKeyAuth = new ApiKeyAuthenticator(fn(string $prefix): ?array => null); // wire your lookup
-    $authMiddleware = new AuthMiddleware($jwt, $apiKeyAuth);
-    $authMiddleware->addPublicPath('/api/auth');   // paths that skip auth
-
-    $tenancyMiddleware = new TenancyMiddleware($tenantResolver);
-    $tenancyMiddleware->addGlobalPath('/api/auth'); // paths that skip tenancy
-
-    $middlewareChain = new MiddlewareChain();
-    $middlewareChain->add(new CorrelationMiddleware());
-    $middlewareChain->add($authMiddleware);
-    $middlewareChain->add($tenancyMiddleware);
-
-    // ── 5. Wire router into the server ───────────────────────────
-
-    $app->addRoute(function (
-        \Swoole\Http\Request $swooleReq,
-        \Swoole\Http\Response $swooleRes,
-    ) use ($router, $middlewareChain): bool {
-        $method = strtoupper($swooleReq->server['request_method'] ?? 'GET');
-        $uri    = $swooleReq->server['request_uri'] ?? '/';
-
-        $match = $router->match($method, $uri);
-        if ($match === null) return false;
-
-        $request  = new Request($swooleReq);
-        $request->setRouteParams($match['params']);
-        $response = new Response($swooleRes);
-
-        $handler = $middlewareChain->wrap(function (Request $req, Response $res) use ($match) {
-            ($match['handler'])($req, $res, $match['params']);
-        });
-
-        $handler($request, $response);
-        return true;
-    });
-
-    // ── 6. Worker-start hooks (DB-dependent services) ────────────
-
-    $app->onWorkerStart(function (Container $c) use ($routes, $config, $server) {
-        $db = $c->make(DbManager::class);
-
-        $eventBus   = new EventBus($db);
-        $dispatcher = new Dispatcher($db);
-        $c->instance(EventBus::class, $eventBus);
-        $c->instance(Dispatcher::class, $dispatcher);
-
-        // Late-wire services that need DB into your routes
-        $routes->setEventBus($eventBus);
-        $routes->setDispatcher($dispatcher);
-    });
-};
+        // Wire the middleware chain + router into the server
+        $this->wireHttpHandler($router);
+    }
+}
 ```
 
 **Lifecycle summary:**
 
 ```
-bin/swoolefabric serve
-  → Application::__construct()     loads config, creates Server, Container, DbManager
-  → require bootstrap.php          your closure runs — registers services, routes, middleware
-  → Application::run()             starts the Swoole server
-      → onWorkerStart              DB pools boot, your onWorkerStart callbacks run
-      → onRequest                  HTTP requests flow through your middleware + routes
-      → onOpen / onMessage / onClose   WebSocket events
+bin/fabriq serve
+  → bootstrap/app.php
+      → Application::__construct()          loads config/, creates Server, Container
+      → registerConfiguredProviders()       register() on each provider
+      → boot()                              boot() on each provider
+  → Application::run()                     starts the Swoole server
+      → onWorkerStart                       DB pools boot, per-worker services
+      → onRequest                           HTTP → Middleware → Router → Handler
+      → onOpen / onMessage / onClose        WebSocket events
 ```
 
 ---
@@ -389,19 +578,20 @@ The `Router` supports static and parameterized routes.
 <?php
 declare(strict_types=1);
 
-namespace MyApp;
+namespace App\Http\Controllers;
 
-use SwooleFabric\Http\Router;
-use SwooleFabric\Http\Request;
-use SwooleFabric\Http\Response;
+use Fabriq\Http\Router;
+use Fabriq\Http\Request;
+use Fabriq\Http\Response;
 
-final class Routes
+final class UserController
 {
-    public function register(Router $router): void
+    public static function routes(Router $router): void
     {
+        $controller = new self();
         // Static routes
-        $router->get('/api/users', $this->listUsers(...));
-        $router->post('/api/users', $this->createUser(...));
+        $router->get('/api/users', $controller->index(...));
+        $router->post('/api/users', $controller->store(...));
 
         // Parameterized routes — {name} segments become $params['name']
         $router->get('/api/users/{id}', $this->getUser(...));
@@ -538,10 +728,10 @@ Middleware wraps route handlers in an onion-like chain. Each middleware receives
 <?php
 declare(strict_types=1);
 
-namespace MyApp\Middleware;
+namespace App\Http\Middleware;
 
-use SwooleFabric\Http\Request;
-use SwooleFabric\Http\Response;
+use Fabriq\Http\Request;
+use Fabriq\Http\Response;
 
 final class LoggingMiddleware
 {
@@ -565,8 +755,8 @@ final class LoggingMiddleware
 ### Registering Middleware
 
 ```php
-use SwooleFabric\Http\MiddlewareChain;
-use MyApp\Middleware\LoggingMiddleware;
+use Fabriq\Http\MiddlewareChain;
+use App\Http\Middleware\LoggingMiddleware;
 
 $chain = new MiddlewareChain();
 $chain->add(new LoggingMiddleware());      // Runs first (outermost)
@@ -608,7 +798,7 @@ $tenancyMiddleware->addGlobalPath('/api/auth/login');
 Use the `Validator` for declarative input validation:
 
 ```php
-use SwooleFabric\Http\Validator;
+use Fabriq\Http\Validator;
 
 $data   = $request->json();
 $errors = Validator::validate($data, [
@@ -644,7 +834,7 @@ Rules are pipe-delimited. Validation stops at the first error per field.
 
 ## 9. Multi-Tenancy
 
-SwooleFabric enforces tenant isolation at the kernel level. Every HTTP request, WebSocket message, queue job, and event carries a `tenant_id`.
+Fabriq enforces tenant isolation at the kernel level. Every HTTP request, WebSocket message, queue job, and event carries a `tenant_id`.
 
 ### How Tenant Resolution Works
 
@@ -656,7 +846,7 @@ The `TenantResolver` tries strategies in order until one matches:
 | `header` | Reads `X-Tenant: acme` header |
 | `token` | Reads `tenant_id` claim from a decoded JWT (requires `AuthMiddleware` to run first) |
 
-Configure the chain in `config/default.php`:
+Configure the chain in `config/tenancy.php`:
 
 ```php
 'tenancy' => [
@@ -669,7 +859,7 @@ Configure the chain in `config/default.php`:
 Once resolved, the tenant is available everywhere:
 
 ```php
-use SwooleFabric\Kernel\Context;
+use Fabriq\Kernel\Context;
 
 $tenantId = Context::tenantId();   // UUID string
 
@@ -681,7 +871,7 @@ $tenantData = Context::getExtra('tenant');
 ### Creating the TenantContext
 
 ```php
-use SwooleFabric\Tenancy\TenantContext;
+use Fabriq\Tenancy\TenantContext;
 
 // From a database row
 $tenant = TenantContext::fromArray([
@@ -704,7 +894,7 @@ $tenant->configValue('feature_flags.dark_mode'); // true
 Always include `tenant_id` in your queries. The `TenantAwareRepository` base class enforces this:
 
 ```php
-use SwooleFabric\Storage\TenantAwareRepository;
+use Fabriq\Storage\TenantAwareRepository;
 
 final class OrderRepository extends TenantAwareRepository
 {
@@ -725,12 +915,12 @@ final class OrderRepository extends TenantAwareRepository
 
 ### JWT Authentication
 
-SwooleFabric includes a pure-PHP JWT implementation (HS256/384/512).
+Fabriq includes a pure-PHP JWT implementation (HS256/384/512).
 
 **Issuing tokens:**
 
 ```php
-use SwooleFabric\Security\JwtAuthenticator;
+use Fabriq\Security\JwtAuthenticator;
 
 $jwt = new JwtAuthenticator(secret: 'my-secret', defaultTtl: 3600);
 
@@ -762,7 +952,7 @@ $roles   = Context::getExtra('roles');   // ['admin']
 API keys use the format `sf_{prefix}_{secret}`:
 
 ```php
-use SwooleFabric\Security\ApiKeyAuthenticator;
+use Fabriq\Security\ApiKeyAuthenticator;
 
 // Generate a new key
 $key = ApiKeyAuthenticator::generateKey();
@@ -781,7 +971,7 @@ $apiKeyAuth = new ApiKeyAuthenticator(function (string $prefix) use ($repo): ?ar
 ### RBAC + ABAC Policy Engine
 
 ```php
-use SwooleFabric\Security\PolicyEngine;
+use Fabriq\Security\PolicyEngine;
 
 $engine = new PolicyEngine();
 
@@ -811,7 +1001,7 @@ $allowed = $engine->evaluate(
 ### Protecting Routes
 
 ```php
-use SwooleFabric\Http\Middleware\PolicyMiddleware;
+use Fabriq\Http\Middleware\PolicyMiddleware;
 
 $policy = new PolicyMiddleware($engine);
 $policy->protect('POST', '/api/posts', 'posts', 'create');
@@ -823,8 +1013,8 @@ $middlewareChain->add($policy);
 ### Rate Limiting
 
 ```php
-use SwooleFabric\Http\Middleware\RateLimitMiddleware;
-use SwooleFabric\Security\RateLimiter;
+use Fabriq\Http\Middleware\RateLimitMiddleware;
+use Fabriq\Security\RateLimiter;
 
 $limiter = new RateLimiter($dbManager);
 
@@ -842,7 +1032,7 @@ $middlewareChain->add($rateLimitMiddleware);
 
 ## 11. Database & Connection Pools
 
-SwooleFabric uses **Swoole coroutine MySQL/Redis** clients with bounded connection pools.
+Fabriq uses **Swoole coroutine MySQL/Redis** clients with bounded connection pools.
 
 ### Architecture
 
@@ -855,7 +1045,7 @@ Pools are created per-worker in `onWorkerStart` — never shared across workers.
 ### Using DbManager
 
 ```php
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Storage\DbManager;
 
 // Borrow → use → release (always in the same coroutine!)
 
@@ -910,10 +1100,10 @@ Extend `TenantAwareRepository` for automatic tenant enforcement:
 <?php
 declare(strict_types=1);
 
-namespace MyApp;
+namespace App\Repositories;
 
-use SwooleFabric\Storage\TenantAwareRepository;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Storage\TenantAwareRepository;
+use Fabriq\Storage\DbManager;
 
 final class OrderRepository extends TenantAwareRepository
 {
@@ -970,7 +1160,7 @@ $stats = $dbManager->stats();
 
 ## 12. WebSocket / Real-Time
 
-SwooleFabric runs HTTP and WebSocket on the same port, same server.
+Fabriq runs HTTP and WebSocket on the same port, same server.
 
 ### WebSocket Authentication
 
@@ -988,13 +1178,13 @@ The `WsAuthHandler` validates the token, extracts `tenant_id` and `actor_id`, an
 <?php
 declare(strict_types=1);
 
-namespace MyApp;
+namespace App\Realtime;
 
 use Swoole\WebSocket\Frame;
 use Swoole\WebSocket\Server as WsServer;
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Realtime\Gateway;
-use SwooleFabric\Realtime\PushService;
+use Fabriq\Kernel\Context;
+use Fabriq\Realtime\Gateway;
+use Fabriq\Realtime\PushService;
 
 final class MyWsHandler
 {
@@ -1072,7 +1262,7 @@ $app->onWorkerStart(function (Container $c) use ($gateway, $jwt, $tenantResolver
 Push messages from **any** code path (HTTP handler, job, event consumer):
 
 ```php
-use SwooleFabric\Realtime\PushService;
+use Fabriq\Realtime\PushService;
 
 // Push to a specific user (all their connections, all workers)
 $pushService->pushUser($tenantId, $userId, [
@@ -1096,7 +1286,7 @@ $pushService->pushTopic('system', [
 ### Presence
 
 ```php
-use SwooleFabric\Realtime\Presence;
+use Fabriq\Realtime\Presence;
 
 $presence->isOnline($tenantId, $userId);   // bool
 $presence->getOnlineUsers($tenantId);      // ['user-1', 'user-2']
@@ -1112,7 +1302,7 @@ Jobs use **Redis Streams** with consumer groups, automatic retries, and dead-let
 ### Dispatching Jobs
 
 ```php
-use SwooleFabric\Queue\Dispatcher;
+use Fabriq\Queue\Dispatcher;
 
 $dispatcher = new Dispatcher($dbManager);
 
@@ -1144,14 +1334,14 @@ Context (`tenant_id`, `actor_id`, `correlation_id`) is automatically propagated 
 
 ### Handling Jobs
 
-Create `config/worker_bootstrap.php`:
+Create `bootstrap/worker.php`:
 
 ```php
 <?php
 declare(strict_types=1);
 
-use SwooleFabric\Queue\Consumer;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Queue\Consumer;
+use Fabriq\Storage\DbManager;
 
 return function (Consumer $consumer, DbManager $db): void {
 
@@ -1174,7 +1364,7 @@ return function (Consumer $consumer, DbManager $db): void {
 Start the worker:
 
 ```bash
-php bin/swoolefabric worker
+php bin/fabriq worker
 ```
 
 ### Retry & Dead Letter Queue
@@ -1195,7 +1385,7 @@ Domain events use **Redis Streams** with consumer group delivery and deduplicati
 ### Emitting Events
 
 ```php
-use SwooleFabric\Events\EventBus;
+use Fabriq\Events\EventBus;
 
 // Simple emit (auto-populates tenant_id, actor_id, correlation_id from Context)
 $eventBus->emit('order.created', [
@@ -1204,7 +1394,7 @@ $eventBus->emit('order.created', [
 ], 'dedupe:order-123');   // Optional dedupe key
 
 // Or build a schema explicitly
-use SwooleFabric\Events\EventSchema;
+use Fabriq\Events\EventSchema;
 
 $event = EventSchema::create(
     eventType: 'order.created',
@@ -1217,15 +1407,15 @@ $eventBus->publish($event);
 
 ### Consuming Events
 
-Create `config/event_bootstrap.php`:
+Create `bootstrap/events.php`:
 
 ```php
 <?php
 declare(strict_types=1);
 
-use SwooleFabric\Events\EventConsumer;
-use SwooleFabric\Events\EventSchema;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Events\EventConsumer;
+use Fabriq\Events\EventSchema;
+use Fabriq\Storage\DbManager;
 
 return function (EventConsumer $consumer, DbManager $db): void {
 
@@ -1257,14 +1447,14 @@ The scheduler dispatches recurring jobs on a configurable interval.
 
 ### Defining Schedules
 
-Create `config/scheduler_bootstrap.php`:
+Create `bootstrap/scheduler.php`:
 
 ```php
 <?php
 declare(strict_types=1);
 
-use SwooleFabric\Queue\Scheduler;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Queue\Scheduler;
+use Fabriq\Storage\DbManager;
 
 return function (Scheduler $scheduler, DbManager $db): void {
 
@@ -1298,7 +1488,7 @@ return function (Scheduler $scheduler, DbManager $db): void {
 Start the scheduler:
 
 ```bash
-php bin/swoolefabric scheduler
+php bin/fabriq scheduler
 ```
 
 The scheduler also promotes **delayed jobs** (dispatched via `dispatchDelayed()`) from the delay ZSET to the target stream when they're due.
@@ -1310,7 +1500,7 @@ The scheduler also promotes **delayed jobs** (dispatched via `dispatchDelayed()`
 ### Structured Logging
 
 ```php
-use SwooleFabric\Observability\Logger;
+use Fabriq\Observability\Logger;
 
 $logger = new Logger('info'); // min level: debug, info, warning, error
 
@@ -1333,7 +1523,7 @@ Context fields (`tenant_id`, `correlation_id`, `actor_id`, `request_id`) are aut
 Metrics are exposed at `GET /metrics` in Prometheus text format.
 
 ```php
-use SwooleFabric\Observability\MetricsCollector;
+use Fabriq\Observability\MetricsCollector;
 
 $metrics = $container->make(MetricsCollector::class);
 
@@ -1366,7 +1556,7 @@ Built-in metrics (registered automatically):
 `GET /health` returns:
 
 ```json
-{"status": "ok", "service": "swoolefabric", "timestamp": 1740000000, "request_id": "abc123"}
+{"status": "ok", "service": "Fabriq", "timestamp": 1740000000, "request_id": "abc123"}
 ```
 
 ---
@@ -1376,7 +1566,7 @@ Built-in metrics (registered automatically):
 Every execution path (HTTP request, WS message, job, event) gets its own isolated `Context`. This prevents state leakage between concurrent requests.
 
 ```php
-use SwooleFabric\Kernel\Context;
+use Fabriq\Kernel\Context;
 
 // Read (available after middleware runs)
 Context::tenantId();        // 'tenant-uuid'
@@ -1402,7 +1592,306 @@ Context::all();
 
 ---
 
-## 18. Testing
+## 18. Live Streaming
+
+Fabriq includes a built-in live streaming engine that runs inside the same Swoole process. It supports **WebRTC signaling**, **RTMP-to-HLS transcoding** via FFmpeg, **viewer tracking**, and **chat moderation** — all multi-tenant and coroutine-safe.
+
+### Architecture
+
+| Component | Responsibility |
+|---|---|
+| `SignalingHandler` | WebRTC SDP offer/answer and ICE candidate exchange via WebSocket |
+| `StreamManager` | Stream lifecycle: start, stop, metadata, active streams |
+| `StreamRepository` | Persistent storage for stream data (tenant-scoped) |
+| `TranscodingPipeline` | Manages FFmpeg processes for RTMP/WHIP → HLS conversion |
+| `HlsManager` | Serves `.m3u8` manifests and `.ts` segments via HTTP |
+| `ViewerTracker` | Tracks concurrent viewers per stream using Redis Sets |
+| `ChatModerator` | Slow mode, word filtering, ban lists for stream chat |
+
+### Configuration
+
+```php
+<?php
+// config/streaming.php
+return [
+    'enabled' => true,
+    'ffmpeg_path' => '/usr/bin/ffmpeg',
+    'hls' => [
+        'segment_duration' => 4,
+        'playlist_size' => 5,
+        'storage_path' => '/tmp/fabriq-hls',
+    ],
+    'stream_key_ttl' => 86400,
+    'max_concurrent_transcodes' => 4,
+    'chat' => [
+        'slow_mode_seconds' => 0,
+        'max_message_length' => 500,
+        'word_filters' => [],
+    ],
+];
+```
+
+### WebRTC Signaling
+
+The `SignalingHandler` exchanges SDP offers/answers and ICE candidates over your existing WebSocket connection:
+
+```php
+// Client sends:
+{"type": "webrtc_offer", "stream_id": "abc", "sdp": "v=0\r\n..."}
+
+// Server forwards to viewers:
+{"type": "webrtc_offer", "stream_id": "abc", "sdp": "...", "from_user_id": "user-1"}
+
+// Viewer responds:
+{"type": "webrtc_answer", "stream_id": "abc", "sdp": "v=0\r\n..."}
+
+// ICE candidates exchanged:
+{"type": "ice_candidate", "stream_id": "abc", "candidate": {...}, "target_user_id": "user-1"}
+```
+
+### HLS Delivery
+
+FFmpeg transcodes incoming streams into HLS segments served directly by Fabriq:
+
+```
+GET /streams/{tenantId}/{streamId}/playlist.m3u8  → HLS manifest
+GET /streams/{tenantId}/{streamId}/segment_0.ts   → Video segment
+```
+
+### Stream Lifecycle
+
+```php
+use Fabriq\Streaming\StreamManager;
+
+$streamManager = $container->make(StreamManager::class);
+
+// Start a stream
+$stream = $streamManager->startStream($tenantId, $userId, $streamKey, $fd);
+
+// Stop a stream
+$streamManager->stopStream($tenantId, $streamId);
+
+// Get active streams for a tenant
+$streams = $streamManager->getActiveStreams($tenantId);
+```
+
+### Viewer Tracking
+
+```php
+use Fabriq\Streaming\ViewerTracker;
+
+$tracker = $container->make(ViewerTracker::class);
+$tracker->addViewer($tenantId, $streamId, $userId);
+$count = $tracker->getViewerCount($tenantId, $streamId);
+$tracker->removeViewer($tenantId, $streamId, $userId);
+```
+
+### Chat Moderation
+
+```php
+use Fabriq\Streaming\ChatModerator;
+
+$moderator = $container->make(ChatModerator::class);
+
+// Check if a message is allowed
+$result = $moderator->canSendMessage($tenantId, $streamId, $userId, $message);
+if (!$result['allowed']) {
+    // $result['reason'] contains the reason
+}
+
+// Ban/unban users
+$moderator->banUser($tenantId, $streamId, $userId);
+$moderator->unbanUser($tenantId, $streamId, $userId);
+```
+
+### Service Provider
+
+Register in `config/app.php`:
+
+```php
+'providers' => [
+    // ... other providers
+    \App\Providers\StreamingServiceProvider::class,
+],
+```
+
+### Metrics
+
+| Metric | Type | Description |
+|---|---|---|
+| `streams_active` | gauge | Active live streams |
+| `stream_viewers` | gauge | Total concurrent viewers |
+| `hls_segments_served` | counter | HLS segments served |
+| `transcoding_processes` | gauge | Active FFmpeg processes |
+
+---
+
+## 19. Game Server
+
+Fabriq includes a real-time game server engine that runs inside the same Swoole process. It supports **casual, .io-style, and competitive games** with configurable tick rates, matchmaking, lobbies, and state synchronization.
+
+### Architecture
+
+| Component | Responsibility |
+|---|---|
+| `GameLoop` | Fixed tick-rate engine using `Swoole\Timer` (10–60 Hz) |
+| `GameRoom` | Single room: state, players, tick handler, lifecycle |
+| `GameRoomManager` | Create, find, join, destroy rooms; cross-worker via Redis |
+| `Matchmaker` | Redis ZSET-based skill matchmaking with O(log N) ranking |
+| `PlayerSession` | Connection tracking with reconnection grace period |
+| `LobbyManager` | Pre-game lobbies with ready checks and countdown |
+| `StateSync` | Delta compression — only send changed state |
+| `UdpProtocol` | Binary message encode/decode (MessagePack or JSON) |
+
+### Configuration
+
+```php
+<?php
+// config/gaming.php
+return [
+    'enabled' => true,
+    'udp_port' => 8001,
+    'tick_rates' => [
+        'casual' => 10,      // Hz
+        'realtime' => 30,    // Hz
+        'competitive' => 60, // Hz
+    ],
+    'max_rooms_per_worker' => 100,
+    'max_players_per_room' => 64,
+    'matchmaking' => [
+        'rating_range' => 100,
+        'expand_after_seconds' => 10,
+        'max_wait_seconds' => 60,
+    ],
+    'reconnection_window_seconds' => 30,
+    'protocol' => 'msgpack', // 'json' | 'msgpack'
+];
+```
+
+### Game Loop & Tick Rates
+
+| Type | Tick Rate | Interval | Use Case |
+|---|---|---|---|
+| `casual` | 10 Hz | 100ms | Card games, trivia, turn-based |
+| `realtime` | 30 Hz | ~33ms | .io games, action RPGs |
+| `competitive` | 60 Hz | ~16ms | FPS, fighting games |
+
+### Binary Protocol (MessagePack)
+
+```php
+use Fabriq\Gaming\UdpProtocol;
+
+$protocol = new UdpProtocol($config);
+
+// Encode game state
+$binary = $protocol->encode(['type' => 'state_update', 'positions' => [...]]);
+
+// Decode incoming packet
+$data = $protocol->decode($rawData);
+```
+
+### Game Rooms
+
+```php
+use Fabriq\Gaming\GameRoomManager;
+
+$roomManager = $container->make(GameRoomManager::class);
+
+// Create a room
+$room = $roomManager->createRoom($tenantId, 'battle', maxPlayers: 16);
+
+// Join a player
+$session = new PlayerSession($userId, $fd, $tenantId);
+$roomManager->joinRoom($tenantId, $room->getRoomId(), $session);
+
+// Start the game
+$room->startGame();
+
+// Destroy room when done
+$roomManager->destroyRoom($tenantId, $room->getRoomId());
+```
+
+### Matchmaking
+
+Players queue with a skill rating. The matchmaker uses Redis sorted sets for efficient range queries:
+
+```php
+use Fabriq\Gaming\Matchmaker;
+
+$matchmaker = $container->make(Matchmaker::class);
+
+// Queue a player
+$matchmaker->queuePlayer($tenantId, $userId, skillRating: 1500, fd: $fd);
+
+// Remove from queue
+$matchmaker->dequeuePlayer($tenantId, $userId);
+
+// Check queue size
+$size = $matchmaker->getQueueSize($tenantId);
+```
+
+The algorithm:
+1. Players are added to a Redis ZSET with skill rating as score
+2. Background poll scans the ZSET every second
+3. Nearby players (± `rating_range`) are matched
+4. After `expand_after_seconds`, the range widens
+5. After `max_wait_seconds`, the player times out
+
+### Pre-Game Lobbies
+
+```php
+use Fabriq\Gaming\LobbyManager;
+
+$lobbyManager = $container->make(LobbyManager::class);
+
+// Create lobby
+$lobbyId = $lobbyManager->createLobby($tenantId, 'battle', maxPlayers: 4);
+
+// Join lobby
+$lobbyManager->joinLobby($tenantId, $lobbyId, $playerSession);
+
+// Ready up
+$lobbyManager->setPlayerReady($tenantId, $lobbyId, $userId, ready: true);
+
+// When all players ready → countdown → game starts automatically
+```
+
+### Player Reconnection
+
+Players who disconnect have a grace period (default 30s) to reconnect:
+
+```php
+$session->disconnect();
+$session->isInReconnectionWindow(30); // true for 30 seconds
+
+// On reconnect
+$session->reconnect($newFd);
+```
+
+### Service Provider
+
+Register in `config/app.php`:
+
+```php
+'providers' => [
+    // ... other providers
+    \App\Providers\GamingServiceProvider::class,
+],
+```
+
+### Metrics
+
+| Metric | Type | Description |
+|---|---|---|
+| `game_rooms_active` | gauge | Active game rooms |
+| `game_players_connected` | gauge | Connected game players |
+| `game_tick_latency_ms` | histogram | Game loop tick timing |
+| `udp_packets_total` | counter | UDP packets processed |
+| `matchmaking_queue_size` | gauge | Players waiting for match |
+
+---
+
+## 20. Testing
 
 ### Running Tests
 
@@ -1423,10 +1912,10 @@ docker compose exec app vendor/bin/phpunit
 <?php
 declare(strict_types=1);
 
-namespace SwooleFabric\Tests\Unit\MyApp;
+namespace Fabriq\Tests\Unit\App;
 
 use PHPUnit\Framework\TestCase;
-use SwooleFabric\Http\Validator;
+use Fabriq\Http\Validator;
 
 final class ValidationTest extends TestCase
 {
@@ -1465,7 +1954,7 @@ final class ValidationTest extends TestCase
 
 ---
 
-## 19. Deployment
+## 21. Deployment
 
 ### Docker Deployment
 
@@ -1476,7 +1965,7 @@ FROM php:8.3-cli
 # Swoole + Redis extensions installed
 # Composer dependencies installed
 EXPOSE 8000
-CMD ["php", "bin/swoolefabric", "serve"]
+CMD ["php", "bin/fabriq", "serve"]
 ```
 
 ### Running Multiple Processes
@@ -1485,9 +1974,9 @@ In production, run three process types (e.g., as separate containers or supervis
 
 | Process | Command | Scaling |
 |---|---|---|
-| **Web** | `php bin/swoolefabric serve` | Scale horizontally (load balancer) |
-| **Worker** | `php bin/swoolefabric worker` | Scale by queue depth |
-| **Scheduler** | `php bin/swoolefabric scheduler` | Run exactly ONE instance |
+| **Web** | `php bin/fabriq serve` | Scale horizontally (load balancer) |
+| **Worker** | `php bin/fabriq worker` | Scale by queue depth |
+| **Scheduler** | `php bin/fabriq scheduler` | Run exactly ONE instance |
 
 ### docker-compose.yml (Production)
 
@@ -1495,20 +1984,20 @@ In production, run three process types (e.g., as separate containers or supervis
 services:
   web:
     image: myapp:latest
-    command: ["php", "bin/swoolefabric", "serve", "config/production.php"]
+    command: ["php", "bin/fabriq", "serve", "config/production.php"]
     ports: ["8000:8000"]
     deploy:
       replicas: 3
 
   worker:
     image: myapp:latest
-    command: ["php", "bin/swoolefabric", "worker", "config/production.php"]
+    command: ["php", "bin/fabriq", "worker", "config/production.php"]
     deploy:
       replicas: 2
 
   scheduler:
     image: myapp:latest
-    command: ["php", "bin/swoolefabric", "scheduler", "config/production.php"]
+    command: ["php", "bin/fabriq", "scheduler", "config/production.php"]
     deploy:
       replicas: 1  # MUST be exactly 1
 ```
@@ -1540,7 +2029,7 @@ return [
 
 ---
 
-## 20. Full Example — Building a Todo API
+## 22. Full Example — Building a Todo API
 
 Let's build a complete tenant-scoped Todo API from scratch.
 
@@ -1566,16 +2055,16 @@ CREATE TABLE IF NOT EXISTS todos (
 
 ### Step 2: Repository
 
-`apps/todo-api/TodoRepository.php`:
+`app/Repositories/TodoRepository.php`:
 
 ```php
 <?php
 declare(strict_types=1);
 
-namespace MyApp\Todo;
+namespace App\Repositories;
 
-use SwooleFabric\Storage\TenantAwareRepository;
-use SwooleFabric\Storage\DbManager;
+use Fabriq\Storage\TenantAwareRepository;
+use Fabriq\Storage\DbManager;
 
 final class TodoRepository extends TenantAwareRepository
 {
@@ -1644,22 +2133,23 @@ final class TodoRepository extends TenantAwareRepository
 
 ### Step 3: Routes
 
-`apps/todo-api/TodoRoutes.php`:
+`app/Http/Controllers/TodoController.php`:
 
 ```php
 <?php
 declare(strict_types=1);
 
-namespace MyApp\Todo;
+namespace App\Http\Controllers;
 
-use SwooleFabric\Http\Router;
-use SwooleFabric\Http\Request;
-use SwooleFabric\Http\Response;
-use SwooleFabric\Http\Validator;
-use SwooleFabric\Kernel\Context;
-use SwooleFabric\Events\EventBus;
+use App\Repositories\TodoRepository;
+use Fabriq\Http\Router;
+use Fabriq\Http\Request;
+use Fabriq\Http\Response;
+use Fabriq\Http\Validator;
+use Fabriq\Kernel\Context;
+use Fabriq\Events\EventBus;
 
-final class TodoRoutes
+final class TodoController
 {
     private ?TodoRepository $repo = null;
     private ?EventBus $eventBus = null;
@@ -1736,82 +2226,19 @@ final class TodoRoutes
 }
 ```
 
-### Step 4: Bootstrap
+### Step 4: Register Routes
 
-`config/bootstrap.php`:
+In `routes/api.php`, register the todo controller routes:
 
 ```php
 <?php
 declare(strict_types=1);
 
-use SwooleFabric\Kernel\Application;
-use SwooleFabric\Kernel\Container;
-use SwooleFabric\Http\Router;
-use SwooleFabric\Http\Request;
-use SwooleFabric\Http\Response;
-use SwooleFabric\Http\MiddlewareChain;
-use SwooleFabric\Http\Middleware\CorrelationMiddleware;
-use SwooleFabric\Http\Middleware\AuthMiddleware;
-use SwooleFabric\Http\Middleware\TenancyMiddleware;
-use SwooleFabric\Security\JwtAuthenticator;
-use SwooleFabric\Security\ApiKeyAuthenticator;
-use SwooleFabric\Tenancy\TenantResolver;
-use SwooleFabric\Storage\DbManager;
-use SwooleFabric\Events\EventBus;
-use MyApp\Todo\TodoRoutes;
-use MyApp\Todo\TodoRepository;
+use Fabriq\Http\Router;
+use App\Http\Controllers\TodoController;
 
-return function (Application $app): void {
-    $config    = $app->config();
-    $container = $app->container();
-
-    // JWT
-    $jwt = new JwtAuthenticator(
-        secret: $config->get('auth.jwt.secret', 'change-me'),
-    );
-    $container->instance(JwtAuthenticator::class, $jwt);
-
-    // Router + Routes
-    $router    = new Router();
-    $todoRoutes = new TodoRoutes();
-    $todoRoutes->register($router);
-
-    // Middleware
-    $apiKeyAuth = new ApiKeyAuthenticator(fn() => null);
-    $auth       = new AuthMiddleware($jwt, $apiKeyAuth);
-    $tenancy    = new TenancyMiddleware(new TenantResolver(
-        chain: ['header'],
-        lookup: fn() => null, // Wire your tenant lookup
-    ));
-
-    $chain = new MiddlewareChain();
-    $chain->add(new CorrelationMiddleware());
-    $chain->add($auth);
-    $chain->add($tenancy);
-
-    // Wire router
-    $app->addRoute(function (\Swoole\Http\Request $req, \Swoole\Http\Response $res) use ($router, $chain): bool {
-        $match = $router->match(
-            strtoupper($req->server['request_method'] ?? 'GET'),
-            $req->server['request_uri'] ?? '/',
-        );
-        if ($match === null) return false;
-
-        $request  = new Request($req);
-        $request->setRouteParams($match['params']);
-        $response = new Response($res);
-
-        $handler = $chain->wrap(fn(Request $r, Response $s) => ($match['handler'])($r, $s, $match['params']));
-        $handler($request, $response);
-        return true;
-    });
-
-    // Worker boot — wire DB-dependent services
-    $app->onWorkerStart(function (Container $c) use ($todoRoutes) {
-        $db = $c->make(DbManager::class);
-        $todoRoutes->setRepository(new TodoRepository($db));
-        $todoRoutes->setEventBus(new EventBus($db));
-    });
+return function (Router $router): void {
+    TodoController::routes($router);
 };
 ```
 
@@ -1819,7 +2246,7 @@ return function (Application $app): void {
 
 ```bash
 # Start the server
-php bin/swoolefabric serve
+php bin/fabriq serve
 
 # Health check
 curl http://localhost:8000/health
@@ -1855,10 +2282,10 @@ curl -X DELETE http://localhost:8000/api/todos/<id> \
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    bin/swoolefabric serve                     │
+│                    bin/fabriq serve                           │
 ├──────────────────────────────────────────────────────────────┤
 │  Application()           → Load config, create Server        │
-│  bootstrap.php           → Register routes, middleware, DI    │
+│  bootstrap/app.php       → Register & boot ServiceProviders  │
 │  Application::run()      → Start Swoole                      │
 │    ├─ onWorkerStart      → Boot DB pools, create services    │
 │    ├─ onRequest          → Context::reset() → Middleware →   │
@@ -1869,11 +2296,11 @@ curl -X DELETE http://localhost:8000/api/todos/<id> \
 └──────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────┐  ┌─────────────────────────────┐
-│  bin/swoolefabric worker   │  │  bin/swoolefabric scheduler  │
+│  bin/fabriq worker         │  │  bin/fabriq scheduler        │
 ├────────────────────────────┤  ├─────────────────────────────┤
 │  Boot DB pools             │  │  Boot DB pools               │
-│  Load worker_bootstrap.php │  │  Load scheduler_bootstrap    │
-│  Load event_bootstrap.php  │  │  Poll delayed ZSET           │
+│  Load bootstrap/worker.php │  │  Load bootstrap/scheduler.php│
+│  Load bootstrap/events.php │  │  Poll delayed ZSET           │
 │  Consumer::consume()       │  │  Dispatch recurring jobs     │
 │  EventConsumer::consume()  │  │  ∞ loop                      │
 └────────────────────────────┘  └─────────────────────────────┘
@@ -1883,40 +2310,54 @@ curl -X DELETE http://localhost:8000/api/todos/<id> \
 
 | File | Receives | Purpose |
 |---|---|---|
-| `config/bootstrap.php` | `Application $app` | Wire routes, middleware, services |
-| `config/worker_bootstrap.php` | `Consumer $consumer, DbManager $db` | Register job handlers |
-| `config/event_bootstrap.php` | `EventConsumer $consumer, DbManager $db` | Register event handlers |
-| `config/scheduler_bootstrap.php` | `Scheduler $scheduler, DbManager $db` | Register scheduled jobs |
+| `bootstrap/app.php` | `Application $app` | Register & boot ServiceProviders |
+| `bootstrap/worker.php` | `Consumer $consumer, DbManager $db` | Register job handlers |
+| `bootstrap/events.php` | `EventConsumer $consumer, DbManager $db` | Register event handlers |
+| `bootstrap/scheduler.php` | `Scheduler $scheduler, DbManager $db` | Register scheduled jobs |
 
 ### Key Classes
 
 | Class | Import | Purpose |
 |---|---|---|
-| `Application` | `SwooleFabric\Kernel\Application` | Main bootstrap, holds config/container/server |
-| `Config` | `SwooleFabric\Kernel\Config` | Dot-notation config access |
-| `Container` | `SwooleFabric\Kernel\Container` | DI container (bind, singleton, instance) |
-| `Context` | `SwooleFabric\Kernel\Context` | Coroutine-local state bag |
-| `Router` | `SwooleFabric\Http\Router` | HTTP routing |
-| `Request` | `SwooleFabric\Http\Request` | HTTP request wrapper |
-| `Response` | `SwooleFabric\Http\Response` | HTTP response wrapper |
-| `Validator` | `SwooleFabric\Http\Validator` | Input validation |
-| `MiddlewareChain` | `SwooleFabric\Http\MiddlewareChain` | Middleware pipeline |
-| `DbManager` | `SwooleFabric\Storage\DbManager` | Connection pool manager |
-| `TenantAwareRepository` | `SwooleFabric\Storage\TenantAwareRepository` | Base repo with tenant enforcement |
-| `TenantResolver` | `SwooleFabric\Tenancy\TenantResolver` | Multi-tenant resolution |
-| `TenantContext` | `SwooleFabric\Tenancy\TenantContext` | Tenant value object |
-| `JwtAuthenticator` | `SwooleFabric\Security\JwtAuthenticator` | JWT encode/decode |
-| `ApiKeyAuthenticator` | `SwooleFabric\Security\ApiKeyAuthenticator` | API key auth |
-| `PolicyEngine` | `SwooleFabric\Security\PolicyEngine` | RBAC + ABAC |
-| `RateLimiter` | `SwooleFabric\Security\RateLimiter` | Sliding window rate limiter |
-| `EventBus` | `SwooleFabric\Events\EventBus` | Publish domain events |
-| `EventConsumer` | `SwooleFabric\Events\EventConsumer` | Consume domain events |
-| `Dispatcher` | `SwooleFabric\Queue\Dispatcher` | Dispatch background jobs |
-| `Consumer` | `SwooleFabric\Queue\Consumer` | Process background jobs |
-| `Scheduler` | `SwooleFabric\Queue\Scheduler` | Recurring job scheduler |
-| `Gateway` | `SwooleFabric\Realtime\Gateway` | WS connection management |
-| `PushService` | `SwooleFabric\Realtime\PushService` | Push to WS clients |
-| `Presence` | `SwooleFabric\Realtime\Presence` | Online user tracking |
-| `Logger` | `SwooleFabric\Observability\Logger` | Structured JSON logging |
-| `MetricsCollector` | `SwooleFabric\Observability\MetricsCollector` | Prometheus metrics |
+| `Application` | `Fabriq\Kernel\Application` | Main bootstrap, holds config/container/server |
+| `Config` | `Fabriq\Kernel\Config` | Dot-notation config access |
+| `Container` | `Fabriq\Kernel\Container` | DI container (bind, singleton, instance) |
+| `Context` | `Fabriq\Kernel\Context` | Coroutine-local state bag |
+| `Router` | `Fabriq\Http\Router` | HTTP routing |
+| `Request` | `Fabriq\Http\Request` | HTTP request wrapper |
+| `Response` | `Fabriq\Http\Response` | HTTP response wrapper |
+| `Validator` | `Fabriq\Http\Validator` | Input validation |
+| `MiddlewareChain` | `Fabriq\Http\MiddlewareChain` | Middleware pipeline |
+| `DbManager` | `Fabriq\Storage\DbManager` | Connection pool manager |
+| `TenantAwareRepository` | `Fabriq\Storage\TenantAwareRepository` | Base repo with tenant enforcement |
+| `TenantResolver` | `Fabriq\Tenancy\TenantResolver` | Multi-tenant resolution |
+| `TenantContext` | `Fabriq\Tenancy\TenantContext` | Tenant value object |
+| `JwtAuthenticator` | `Fabriq\Security\JwtAuthenticator` | JWT encode/decode |
+| `ApiKeyAuthenticator` | `Fabriq\Security\ApiKeyAuthenticator` | API key auth |
+| `PolicyEngine` | `Fabriq\Security\PolicyEngine` | RBAC + ABAC |
+| `RateLimiter` | `Fabriq\Security\RateLimiter` | Sliding window rate limiter |
+| `EventBus` | `Fabriq\Events\EventBus` | Publish domain events |
+| `EventConsumer` | `Fabriq\Events\EventConsumer` | Consume domain events |
+| `Dispatcher` | `Fabriq\Queue\Dispatcher` | Dispatch background jobs |
+| `Consumer` | `Fabriq\Queue\Consumer` | Process background jobs |
+| `Scheduler` | `Fabriq\Queue\Scheduler` | Recurring job scheduler |
+| `Gateway` | `Fabriq\Realtime\Gateway` | WS connection management |
+| `PushService` | `Fabriq\Realtime\PushService` | Push to WS clients |
+| `Presence` | `Fabriq\Realtime\Presence` | Online user tracking |
+| `Logger` | `Fabriq\Observability\Logger` | Structured JSON logging |
+| `MetricsCollector` | `Fabriq\Observability\MetricsCollector` | Prometheus metrics |
+| `StreamManager` | `Fabriq\Streaming\StreamManager` | Live stream lifecycle management |
+| `SignalingHandler` | `Fabriq\Streaming\SignalingHandler` | WebRTC SDP/ICE signaling via WebSocket |
+| `TranscodingPipeline` | `Fabriq\Streaming\TranscodingPipeline` | FFmpeg RTMP→HLS transcoding |
+| `HlsManager` | `Fabriq\Streaming\HlsManager` | HLS manifest and segment serving |
+| `ViewerTracker` | `Fabriq\Streaming\ViewerTracker` | Concurrent viewer tracking (Redis Sets) |
+| `ChatModerator` | `Fabriq\Streaming\ChatModerator` | Stream chat moderation |
+| `GameLoop` | `Fabriq\Gaming\GameLoop` | Fixed tick-rate game engine (Swoole Timer) |
+| `GameRoom` | `Fabriq\Gaming\GameRoom` | Single game room state and logic |
+| `GameRoomManager` | `Fabriq\Gaming\GameRoomManager` | Room lifecycle and cross-worker sync |
+| `Matchmaker` | `Fabriq\Gaming\Matchmaker` | Redis ZSET-based matchmaking |
+| `PlayerSession` | `Fabriq\Gaming\PlayerSession` | Player connection and reconnection |
+| `LobbyManager` | `Fabriq\Gaming\LobbyManager` | Pre-game lobbies with ready checks |
+| `StateSync` | `Fabriq\Gaming\StateSync` | Delta compression state sync |
+| `UdpProtocol` | `Fabriq\Gaming\UdpProtocol` | MessagePack/JSON binary protocol |
 
