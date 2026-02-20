@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Deployment - Fabriq Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<aside id="docs-sidebar"></aside>
+<div id="sidebar-overlay"></div>
+<header id="docs-header"></header>
+
+<div id="docs-content">
+    <div id="docs-content-inner" class="docs-content">
+
+        <h1>Production Deployment</h1>
+        <p>Deploy Fabriq as a set of Docker containers with external MySQL and Redis. This guide covers the production Dockerfile, environment configuration, reverse proxy setup, cloud deployment options, and a comprehensive checklist.</p>
+
+        <!-- ── Overview ─────────────────────────────────────────────── -->
+        <h2 id="overview">Overview</h2>
+
+        <p>Fabriq is a <strong>long-running Swoole process</strong> &mdash; not traditional PHP-FPM. You do <strong>not</strong> deploy it behind Apache or Nginx+FPM. Instead, you run it as Docker containers (or any process supervisor), with a reverse proxy in front for TLS termination.</p>
+
+        <p>The same Docker image is used for all process types &mdash; only the startup command changes.</p>
+
+        <!-- ── Process Types ────────────────────────────────────────── -->
+        <h2 id="process-types">Process Types</h2>
+
+        <p>Fabriq requires <strong>three process types</strong> running in production:</p>
+
+        <table>
+            <thead>
+                <tr><th>Process</th><th>Command</th><th>Scaling</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Web</strong></td><td><code>php bin/fabriq serve</code></td><td>Horizontal (multiple replicas)</td><td>HTTP API + WebSocket + UDP</td></tr>
+                <tr><td><strong>Processor</strong></td><td><code>php bin/fabriq processor</code></td><td>Scale by queue depth (1&ndash;N)</td><td>Queue &amp; event consumers</td></tr>
+                <tr><td><strong>Scheduler</strong></td><td><code>php bin/fabriq scheduler</code></td><td><strong>Exactly 1 instance</strong></td><td>Recurring job dispatch</td></tr>
+            </tbody>
+        </table>
+
+        <div class="callout callout-warning">
+            <strong>Warning:</strong> Running more than one scheduler instance will cause duplicate job dispatches.
+        </div>
+
+        <!-- ── Production Dockerfile ────────────────────────────────── -->
+        <h2 id="production-dockerfile">Production Dockerfile</h2>
+
+        <p>The included <code>infra/Dockerfile</code> works for development. For production, apply these optimizations:</p>
+
+        <pre><code class="language-dockerfile">FROM php:8.3-cli
+
+# System dependencies (no git in production)
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev libssl-dev unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Swoole + PDO MySQL + Redis extensions
+RUN pecl install swoole-5.1.5 \
+    && docker-php-ext-enable swoole
+RUN docker-php-ext-install pdo pdo_mysql
+RUN pecl install redis \
+    && docker-php-ext-enable redis
+
+# Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app
+
+# Layer-cached dependency install (no dev dependencies)
+COPY composer.json composer.lock* ./
+RUN composer install --no-interaction --no-dev --prefer-dist --optimize-autoloader
+
+# Copy application source
+COPY . .
+
+# Re-dump optimized autoloader with full source
+RUN composer dump-autoload --optimize --no-dev
+
+EXPOSE 8000
+
+CMD ["php", "bin/fabriq", "serve"]</code></pre>
+
+        <h3>Key Production Differences</h3>
+
+        <table>
+            <thead>
+                <tr><th>Aspect</th><th>Development</th><th>Production</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Composer flags</td><td><code>--no-interaction --prefer-dist</code></td><td><code>--no-interaction --no-dev --prefer-dist --optimize-autoloader</code></td></tr>
+                <tr><td>Volume mounts</td><td><code>..:/app</code> (live reload)</td><td>None (code baked into image)</td></tr>
+                <tr><td>Dev dependencies</td><td>Included (PHPUnit, etc.)</td><td>Excluded</td></tr>
+                <tr><td>Autoloader</td><td>Standard PSR-4</td><td>Optimized classmap</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Environment Configuration ────────────────────────────── -->
+        <h2 id="environment-config">Environment Configuration</h2>
+
+        <p>All sensitive values and environment-specific settings should be provided via <strong>environment variables</strong>. Never hardcode credentials in config files for production.</p>
+
+        <h3>Config Files with Environment Variables</h3>
+
+        <p>Update your config files to read from environment variables with safe defaults:</p>
+
+        <h4><code>config/database.php</code></h4>
+
+        <pre><code class="language-php">return [
+    'platform' => [
+        'host'     => getenv('DB_HOST') ?: 'mysql',
+        'port'     => (int) (getenv('DB_PORT') ?: 3306),
+        'database' => getenv('DB_PLATFORM_NAME') ?: 'sf_platform',
+        'username' => getenv('DB_USERNAME') ?: 'fabriq',
+        'password' => getenv('DB_PASSWORD') ?: 'sfpass',
+        'charset'  => 'utf8mb4',
+        'pool'     => [
+            'max_size'       => (int) (getenv('DB_POOL_MAX') ?: 20),
+            'borrow_timeout' => 3.0,
+            'idle_timeout'   => 60.0,
+        ],
+    ],
+    // ... app section follows the same pattern
+];</code></pre>
+
+        <h4><code>config/redis.php</code></h4>
+
+        <pre><code class="language-php">return [
+    'host'     => getenv('REDIS_HOST') ?: 'redis',
+    'port'     => (int) (getenv('REDIS_PORT') ?: 6379),
+    'password' => getenv('REDIS_PASSWORD') ?: '',
+    'pool'     => [
+        'max_size'       => (int) (getenv('REDIS_POOL_MAX') ?: 20),
+        'borrow_timeout' => 3.0,
+        'idle_timeout'   => 60.0,
+    ],
+];</code></pre>
+
+        <h4><code>config/auth.php</code></h4>
+
+        <pre><code class="language-php">return [
+    'jwt' => [
+        'secret'    => getenv('JWT_SECRET') ?: '',
+        'algorithm' => 'HS256',
+        'ttl'       => (int) (getenv('JWT_TTL') ?: 3600),
+    ],
+];</code></pre>
+
+        <h3>Environment Variables Reference</h3>
+
+        <table>
+            <thead>
+                <tr><th>Variable</th><th>Required</th><th>Default</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>DB_HOST</code></td><td>Yes</td><td><code>mysql</code></td><td>MySQL hostname</td></tr>
+                <tr><td><code>DB_PORT</code></td><td>No</td><td><code>3306</code></td><td>MySQL port</td></tr>
+                <tr><td><code>DB_USERNAME</code></td><td>Yes</td><td><code>fabriq</code></td><td>MySQL username</td></tr>
+                <tr><td><code>DB_PASSWORD</code></td><td>Yes</td><td><code>sfpass</code></td><td>MySQL password</td></tr>
+                <tr><td><code>DB_PLATFORM_NAME</code></td><td>No</td><td><code>sf_platform</code></td><td>Platform database name</td></tr>
+                <tr><td><code>DB_APP_NAME</code></td><td>No</td><td><code>sf_app</code></td><td>Application database name</td></tr>
+                <tr><td><code>DB_POOL_MAX</code></td><td>No</td><td><code>20</code></td><td>Max connections per pool per worker</td></tr>
+                <tr><td><code>REDIS_HOST</code></td><td>Yes</td><td><code>redis</code></td><td>Redis hostname</td></tr>
+                <tr><td><code>REDIS_PORT</code></td><td>No</td><td><code>6379</code></td><td>Redis port</td></tr>
+                <tr><td><code>REDIS_PASSWORD</code></td><td>No</td><td><em>(empty)</em></td><td>Redis password (strongly recommended)</td></tr>
+                <tr><td><code>REDIS_POOL_MAX</code></td><td>No</td><td><code>20</code></td><td>Max Redis connections per pool</td></tr>
+                <tr><td><code>JWT_SECRET</code></td><td>Yes</td><td><em>(empty)</em></td><td>JWT signing secret (min 32 chars)</td></tr>
+                <tr><td><code>JWT_TTL</code></td><td>No</td><td><code>3600</code></td><td>JWT token TTL in seconds</td></tr>
+                <tr><td><code>SWOOLE_WORKERS</code></td><td>No</td><td>CPU count</td><td>Number of Swoole worker processes</td></tr>
+                <tr><td><code>SWOOLE_TASK_WORKERS</code></td><td>No</td><td><code>2</code></td><td>Number of task worker processes</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Production Docker Compose ────────────────────────────── -->
+        <h2 id="docker-compose">Production Docker Compose</h2>
+
+        <p>Create <code>infra/docker-compose.prod.yml</code> for production deployment. This assumes MySQL and Redis are managed externally (e.g., AWS RDS, ElastiCache):</p>
+
+        <pre><code class="language-yaml">services:
+  web:
+    image: ${REGISTRY:-fabriq}:${TAG:-latest}
+    command: ["php", "bin/fabriq", "serve"]
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_POOL_MAX=${DB_POOL_MAX:-30}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - SWOOLE_WORKERS=${SWOOLE_WORKERS:-8}
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - sf-net
+
+  processor:
+    image: ${REGISTRY:-fabriq}:${TAG:-latest}
+    command: ["php", "bin/fabriq", "processor"]
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+    networks:
+      - sf-net
+
+  scheduler:
+    image: ${REGISTRY:-fabriq}:${TAG:-latest}
+    command: ["php", "bin/fabriq", "scheduler"]
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    deploy:
+      replicas: 1  # MUST be exactly 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - sf-net
+
+networks:
+  sf-net:
+    driver: bridge</code></pre>
+
+        <h3>Build &amp; Deploy</h3>
+
+        <pre><code class="language-bash"># Build the production image
+docker build -f infra/Dockerfile -t your-registry.com/fabriq:1.0.0 .
+
+# Push to your container registry
+docker push your-registry.com/fabriq:1.0.0
+
+# Deploy on the production server
+REGISTRY=your-registry.com/fabriq TAG=1.0.0 \
+  docker compose -f infra/docker-compose.prod.yml --env-file .env.production up -d</code></pre>
+
+        <h3>Example <code>.env.production</code></h3>
+
+        <pre><code class="language-bash"># Docker image
+REGISTRY=your-registry.com/fabriq
+TAG=1.0.0
+
+# Database (e.g., AWS RDS)
+DB_HOST=your-rds-instance.region.rds.amazonaws.com
+DB_USERNAME=fabriq_prod
+DB_PASSWORD=strong-random-password-here
+DB_POOL_MAX=30
+
+# Redis (e.g., AWS ElastiCache)
+REDIS_HOST=your-elasticache-cluster.region.cache.amazonaws.com
+REDIS_PASSWORD=redis-auth-token-here
+REDIS_POOL_MAX=30
+
+# Auth
+JWT_SECRET=your-256-bit-random-secret-minimum-32-characters
+JWT_TTL=3600
+
+# Swoole
+SWOOLE_WORKERS=8
+SWOOLE_TASK_WORKERS=4</code></pre>
+
+        <div class="callout callout-danger">
+            <strong>Never commit <code>.env.production</code> to Git.</strong> Use your CI/CD platform's secret management (GitHub Secrets, AWS Parameter Store, HashiCorp Vault, etc.).
+        </div>
+
+        <!-- ── Reverse Proxy & TLS ──────────────────────────────────── -->
+        <h2 id="reverse-proxy">Reverse Proxy &amp; TLS</h2>
+
+        <p>Fabriq serves HTTP and WebSocket on port 8000. In production, place a reverse proxy in front for TLS termination, load balancing, and HTTP/2.</p>
+
+        <h3>Nginx</h3>
+
+        <pre><code class="language-text">upstream fabriq_web {
+    server 127.0.0.1:8000;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.yourdomain.com;
+
+    ssl_certificate     /etc/ssl/certs/yourdomain.crt;
+    ssl_certificate_key /etc/ssl/private/yourdomain.key;
+
+    # HTTP API requests
+    location / {
+        proxy_pass http://fabriq_web;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+    }
+
+    # WebSocket upgrade
+    location /ws {
+        proxy_pass http://fabriq_web;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 86400;
+    }
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    server_name api.yourdomain.com;
+    return 301 https://$server_name$request_uri;
+}</code></pre>
+
+        <h3>Caddy (Automatic TLS)</h3>
+
+        <pre><code class="language-text">api.yourdomain.com {
+    reverse_proxy localhost:8000
+}</code></pre>
+
+        <p>Caddy automatically provisions and renews Let&rsquo;s Encrypt TLS certificates.</p>
+
+        <h3>AWS Application Load Balancer</h3>
+
+        <ol>
+            <li>Create a <strong>Target Group</strong> pointing to port 8000 on your ECS tasks / EC2 instances</li>
+            <li>Configure the <strong>health check</strong> path as <code>/health</code></li>
+            <li>Create an <strong>ALB</strong> listener on port 443 with your ACM certificate</li>
+            <li>Enable <strong>sticky sessions</strong> if your WebSocket clients don&rsquo;t include auth tokens on every message</li>
+            <li>Set the <strong>idle timeout</strong> to at least 3600 seconds for WebSocket connections</li>
+        </ol>
+
+        <!-- ── Cloud Deployment Options ─────────────────────────────── -->
+        <h2 id="cloud-options">Cloud Deployment Options</h2>
+
+        <p>The same Docker image runs on any cloud platform:</p>
+
+        <table>
+            <thead>
+                <tr><th>Platform</th><th>Web</th><th>Worker</th><th>Scheduler</th><th>Database</th><th>Redis</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>AWS</strong></td><td>ECS/Fargate + ALB</td><td>ECS Service</td><td>ECS (1 task)</td><td>RDS MySQL 8.0</td><td>ElastiCache Redis 7</td></tr>
+                <tr><td><strong>GCP</strong></td><td>Cloud Run / GKE</td><td>GKE Deployment</td><td>GKE (1 replica)</td><td>Cloud SQL MySQL</td><td>Memorystore Redis</td></tr>
+                <tr><td><strong>Azure</strong></td><td>Container Apps / AKS</td><td>AKS Deployment</td><td>AKS (1 replica)</td><td>Azure MySQL</td><td>Azure Cache Redis</td></tr>
+                <tr><td><strong>DigitalOcean</strong></td><td>App Platform</td><td>Droplet</td><td>Droplet</td><td>Managed MySQL</td><td>Managed Redis</td></tr>
+                <tr><td><strong>Self-hosted</strong></td><td>Docker Compose / K8s</td><td>Docker Compose / K8s</td><td>Docker Compose / K8s</td><td>MySQL 8.0</td><td>Redis 7</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Kubernetes Example</h3>
+
+        <pre><code class="language-yaml"># web-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fabriq-web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: fabriq
+      role: web
+  template:
+    metadata:
+      labels:
+        app: fabriq
+        role: web
+    spec:
+      containers:
+        - name: fabriq
+          image: your-registry.com/fabriq:1.0.0
+          command: ["php", "bin/fabriq", "serve"]
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: fabriq-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"
+              memory: "512Mi"
+---
+# processor-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fabriq-processor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fabriq
+      role: processor
+  template:
+    metadata:
+      labels:
+        app: fabriq
+        role: processor
+    spec:
+      containers:
+        - name: fabriq
+          image: your-registry.com/fabriq:1.0.0
+          command: ["php", "bin/fabriq", "processor"]
+          envFrom:
+            - secretRef:
+                name: fabriq-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "256Mi"
+---
+# scheduler-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fabriq-scheduler
+spec:
+  replicas: 1  # MUST be exactly 1
+  strategy:
+    type: Recreate  # Ensure only 1 instance during updates
+  selector:
+    matchLabels:
+      app: fabriq
+      role: scheduler
+  template:
+    metadata:
+      labels:
+        app: fabriq
+        role: scheduler
+    spec:
+      containers:
+        - name: fabriq
+          image: your-registry.com/fabriq:1.0.0
+          command: ["php", "bin/fabriq", "scheduler"]
+          envFrom:
+            - secretRef:
+                name: fabriq-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"</code></pre>
+
+        <!-- ── Connection Pool Sizing ───────────────────────────────── -->
+        <h2 id="pool-sizing">Connection Pool Sizing</h2>
+
+        <p>Each Swoole worker maintains its own connection pools. The total max connections depend on the number of workers and replicas:</p>
+
+        <pre><code class="language-text">Total MySQL connections = replicas × workers_per_replica × pool_max_size
+
+Example (production):
+  Web:       3 replicas × 8 workers × 30 pool_max =  720 connections
+  Processor: 2 replicas × 1 process × 30 pool_max =   60 connections
+  Scheduler: 1 replica  × 1 worker  × 30 pool_max =   30 connections
+                                           Total: ~810 max connections</code></pre>
+
+        <p>Ensure your MySQL <code>max_connections</code> is higher than your total max pool size:</p>
+
+        <pre><code class="language-sql">-- Check current setting
+SHOW VARIABLES LIKE 'max_connections';
+
+-- Set to accommodate all pools + some headroom
+SET GLOBAL max_connections = 1000;</code></pre>
+
+        <h3>Recommended Pool Sizes by Scale</h3>
+
+        <table>
+            <thead>
+                <tr><th>Scale</th><th>Workers</th><th>DB Pool Max</th><th>Redis Pool Max</th><th>Total DB Conns</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Small</td><td>2</td><td>10</td><td>10</td><td>~90</td></tr>
+                <tr><td>Medium</td><td>4</td><td>20</td><td>20</td><td>~300</td></tr>
+                <tr><td>Large</td><td>8</td><td>30</td><td>30</td><td>~810</td></tr>
+                <tr><td>XL</td><td>16</td><td>40</td><td>40</td><td>~2,040</td></tr>
+            </tbody>
+        </table>
+
+        <!-- ── Zero-Downtime Deployment ─────────────────────────────── -->
+        <h2 id="zero-downtime">Zero-Downtime Deployment</h2>
+
+        <p>Since Fabriq is a long-running server, deployments need to be graceful:</p>
+
+        <h3>Docker Compose Rolling Update</h3>
+
+        <pre><code class="language-bash"># Build new image
+docker build -f infra/Dockerfile -t your-registry.com/fabriq:1.1.0 .
+docker push your-registry.com/fabriq:1.1.0
+
+# Update the TAG and redeploy
+TAG=1.1.0 docker compose -f infra/docker-compose.prod.yml --env-file .env.production up -d</code></pre>
+
+        <h3>Kubernetes Rolling Update</h3>
+
+        <pre><code class="language-bash"># Update the image tag — Kubernetes handles the rest
+kubectl set image deployment/fabriq-web fabriq=your-registry.com/fabriq:1.1.0
+kubectl set image deployment/fabriq-processor fabriq=your-registry.com/fabriq:1.1.0
+kubectl set image deployment/fabriq-scheduler fabriq=your-registry.com/fabriq:1.1.0</code></pre>
+
+        <h3>Database Migrations</h3>
+
+        <p>Run migrations <strong>before</strong> deploying new application code:</p>
+
+        <pre><code class="language-bash"># Via Docker (run once, then exit)
+docker run --rm \
+  --env-file .env.production \
+  --network sf-net \
+  your-registry.com/fabriq:1.1.0 \
+  php bin/fabriq migrate
+
+# Via Kubernetes
+kubectl run fabriq-migrate --rm -it --restart=Never \
+  --image=your-registry.com/fabriq:1.1.0 \
+  --env-from=secret/fabriq-secrets \
+  -- php bin/fabriq migrate</code></pre>
+
+        <!-- ── Production Checklist ─────────────────────────────────── -->
+        <h2 id="checklist">Production Checklist</h2>
+
+        <h3>Security</h3>
+        <ul>
+            <li>JWT secret is set via environment variable (minimum 32 characters)</li>
+            <li>Database passwords are strong and set via environment variables</li>
+            <li>Redis password is enabled</li>
+            <li>MySQL and Redis ports are <strong>not exposed</strong> publicly (internal network only)</li>
+            <li>Adminer is <strong>removed</strong> from the production compose file</li>
+            <li>TLS is terminated at the reverse proxy / load balancer</li>
+            <li><code>.env.production</code> is <strong>not committed</strong> to version control</li>
+        </ul>
+
+        <h3>Performance</h3>
+        <ul>
+            <li>Swoole workers tuned to CPU count (<code>swoole_cpu_num()</code> or <code>SWOOLE_WORKERS</code>)</li>
+            <li>Connection pool sizes tuned for your scale (see table above)</li>
+            <li>MySQL <code>max_connections</code> accommodates total pool size</li>
+            <li>Composer installed with <code>--no-dev --optimize-autoloader</code></li>
+        </ul>
+
+        <h3>Reliability</h3>
+        <ul>
+            <li>Health check endpoint <code>/health</code> wired to load balancer</li>
+            <li>Scheduler runs <strong>exactly 1 replica</strong> (never more)</li>
+            <li>Worker and scheduler have restart policies (<code>on-failure</code> or <code>unless-stopped</code>)</li>
+            <li>Container images are tagged with specific versions (not <code>latest</code>)</li>
+        </ul>
+
+        <h3>Observability</h3>
+        <ul>
+            <li>Logs are routed to a log aggregator (CloudWatch, Loki, ELK, Datadog)</li>
+            <li>Prometheus scrapes <code>GET /metrics</code> endpoint</li>
+            <li>Alerts configured for error rate, latency, pool exhaustion</li>
+            <li>Distributed tracing via <code>X-Correlation-ID</code> / <code>traceparent</code> headers</li>
+        </ul>
+
+        <h3>CI/CD</h3>
+        <ul>
+            <li>Automated image builds on merge to main</li>
+            <li>PHPUnit tests pass before deployment (<code>vendor/bin/phpunit</code>)</li>
+            <li>Rolling deploys for zero-downtime updates</li>
+            <li>Database migrations run before deploying new code</li>
+        </ul>
+
+        <!-- Prev / Next -->
+        <div id="docs-prev-next"></div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-php.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-sql.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+<script src="assets/docs.js"></script>
+</body>
+</html>
+

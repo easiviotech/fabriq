@@ -63,7 +63,7 @@ $dispatcher->dispatch(
 
         <h3>Handling Jobs</h3>
 
-        <p>Create <code>bootstrap/worker.php</code>:</p>
+        <p>Create <code>bootstrap/processor.php</code>:</p>
 
         <pre><code class="language-php">&lt;?php
 declare(strict_types=1);
@@ -90,7 +90,7 @@ return function (Consumer $consumer, DbManager $db): void {
 
         <p>Start the worker:</p>
 
-        <pre><code class="language-bash">php bin/fabriq worker</code></pre>
+        <pre><code class="language-bash">php bin/fabriq processor</code></pre>
 
         <h3>Retry &amp; Dead Letter Queue</h3>
 

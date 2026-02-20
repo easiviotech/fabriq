@@ -7,7 +7,7 @@ declare(strict_types=1);
  *
  * Usage:
  *   php bin/fabriq serve       — Start HTTP + WS server
- *   php bin/fabriq worker      — Start queue consumers
+ *   php bin/fabriq processor   — Start queue/event processor
  *   php bin/fabriq scheduler   — Start scheduler
  *
  * All commands load the application via bootstrap/app.php,
@@ -38,11 +38,14 @@ switch ($command) {
         $app->run();
         break;
 
-    case 'worker':
+    case 'processor':
         echo "╔══════════════════════════════════════╗\n";
         echo "║              Fabriq                  ║\n";
-        echo "║           Queue Worker               ║\n";
+        echo "║         Queue Processor              ║\n";
         echo "╚══════════════════════════════════════╝\n\n";
+
+        // Enable coroutine hooks for phpredis, PDO, etc.
+        \Swoole\Runtime::enableCoroutine(SWOOLE_HOOK_ALL);
 
         $basePath = dirname(__DIR__);
         $config = Config::fromDirectory($basePath . '/config');
@@ -61,10 +64,10 @@ switch ($command) {
                 backoff: $config->get('queue.retry.backoff', [1, 5, 30]),
             );
 
-            // Load app-level job handlers via a worker bootstrap (if exists)
-            $workerBootstrap = $basePath . '/bootstrap/worker.php';
-            if (is_file($workerBootstrap)) {
-                (require $workerBootstrap)($consumer, $dbManager);
+            // Load app-level job handlers via a processor bootstrap (if exists)
+            $processorBootstrap = $basePath . '/bootstrap/processor.php';
+            if (is_file($processorBootstrap)) {
+                (require $processorBootstrap)($consumer, $dbManager);
             }
 
             // Also start event consumers
@@ -78,7 +81,7 @@ switch ($command) {
                 (require $eventBootstrap)($eventConsumer, $dbManager);
             }
 
-            echo "[Fabriq] Worker starting on queue 'default'...\n";
+            echo "[Fabriq] Processor starting on queue 'default'...\n";
 
             // Run event consumer in parallel coroutine
             \Swoole\Coroutine::create(function () use ($eventConsumer) {
@@ -95,6 +98,9 @@ switch ($command) {
         echo "║              Fabriq                  ║\n";
         echo "║            Scheduler                 ║\n";
         echo "╚══════════════════════════════════════╝\n\n";
+
+        // Enable coroutine hooks for phpredis, PDO, etc.
+        \Swoole\Runtime::enableCoroutine(SWOOLE_HOOK_ALL);
 
         $basePath = dirname(__DIR__);
         $config = Config::fromDirectory($basePath . '/config');
@@ -131,12 +137,12 @@ switch ($command) {
         echo "  php bin/fabriq <command>\n\n";
         echo "Commands:\n";
         echo "  serve       Start HTTP + WebSocket server\n";
-        echo "  worker      Start queue consumer workers\n";
+        echo "  processor   Start queue/event processor\n";
         echo "  scheduler   Start cron-like scheduler\n";
         echo "  help        Show this help message\n\n";
         echo "Examples:\n";
         echo "  php bin/fabriq serve\n";
-        echo "  php bin/fabriq worker\n";
+        echo "  php bin/fabriq processor\n";
         echo "  php bin/fabriq scheduler\n";
         break;
 }

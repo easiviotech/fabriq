@@ -89,14 +89,79 @@ $tenant->configValue('feature_flags.dark_mode'); // true</code></pre>
     name: string      // Display name
     plan: string      // "free", "pro", "enterprise"
     status: string    // "active", "suspended"
-    config: array     // Tenant-specific overrides
-    dbKey: ?string    // For future shard routing
+    config: array     // Tenant-specific overrides (including database strategy)
+    dbKey: ?string    // Database routing key — drives TenantDbRouter
 }</code></pre>
 
         <div class="callout warning">
             <div class="callout-title">Important</div>
             <p>Suspended tenants are rejected at resolution time. You do not need to check status in your application code.</p>
         </div>
+
+        <!-- ── Per-Tenant DB Routing ─────────────────────────────────── -->
+        <h2 id="db-routing">Per-Tenant Database Routing</h2>
+
+        <p>The <code>TenantDbRouter</code> dynamically selects the correct database connection based on the tenant&rsquo;s configuration. This enables three isolation strategies:</p>
+
+        <table>
+            <thead>
+                <tr><th>Strategy</th><th>How It Works</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>shared</code> (default)</td><td>All tenants share the <code>app</code> pool. Row-level isolation via <code>WHERE tenant_id = ?</code></td></tr>
+                <tr><td><code>same_server</code></td><td>Same MySQL server, separate database. <code>USE &lt;tenant_db&gt;</code> before each query</td></tr>
+                <tr><td><code>dedicated</code></td><td>Tenant has its own MySQL server; a dedicated connection pool is created dynamically with LRU eviction</td></tr>
+            </tbody>
+        </table>
+
+        <p>Configure the strategy in the tenant&rsquo;s <code>config_json</code>:</p>
+
+        <pre><code class="language-json">// Shared (default — no config needed)
+{ "database": { "strategy": "shared" } }
+
+// Same server, separate database
+{
+  "database": {
+    "strategy": "same_server",
+    "name": "tenant_acme_db"
+  }
+}
+
+// Dedicated server
+{
+  "database": {
+    "strategy": "dedicated",
+    "host": "10.0.1.50",
+    "port": 3306,
+    "name": "acme_production",
+    "username": "acme_user",
+    "password": "secret"
+  }
+}</code></pre>
+
+        <h3>Routing Flow</h3>
+
+        <pre><code class="language-text">Request arrives
+  → TenancyMiddleware resolves tenant
+    → Context::setTenant(TenantContext)
+      → Application code calls DB::table('orders')->get()
+        → QueryBuilder calls TenantDbRouter::acquire('app')
+          → Router inspects tenant config['database']['strategy']
+            → shared:    borrow from default 'app' pool
+            → same_server: borrow from 'app' pool, then USE <tenant_db>
+            → dedicated: borrow from tenant-specific pool (LRU cached)
+          → Query executes on the correct connection
+        → TenantDbRouter::release() returns connection</code></pre>
+
+        <h3>Stored Procedures &amp; Tenant Routing</h3>
+
+        <p>Stored procedure calls (<code>DB::call('sp_name')</code>) are also routed through <code>TenantDbRouter</code>. If a tenant uses <code>same_server</code> or <code>dedicated</code> strategy, the <code>CALL</code> statement executes on the tenant&rsquo;s database automatically:</p>
+
+        <pre><code class="language-php">// Automatically routed to the tenant's database
+$result = DB::call('sp_calculate_invoice')
+    ->in('order_id', $orderId)
+    ->out('invoice_total')
+    ->exec();</code></pre>
 
         <!-- ── Enforcement ─────────────────────────────────────────── -->
         <h2 id="enforcement">Tenant Enforcement</h2>
@@ -112,13 +177,30 @@ $tenant->configValue('feature_flags.dark_mode'); // true</code></pre>
                 <tr><td>WebSocket</td><td>WsAuthHandler resolves from JWT, registers in Gateway</td></tr>
                 <tr><td>Queue Jobs</td><td>Context restored from job fields (<code>tenant_id</code> stored at dispatch)</td></tr>
                 <tr><td>Event Consumer</td><td>Context restored from event fields</td></tr>
+                <tr><td>ORM Models</td><td><code>HasTenantScope</code> trait auto-adds <code>WHERE tenant_id = ?</code> and injects <code>tenant_id</code> on insert</td></tr>
+                <tr><td>ORM QueryBuilder</td><td><code>tenantScoped()</code> method adds tenant filter; models opt-in via <code>$tenantScoped = true</code></td></tr>
+                <tr><td>DB Routing</td><td><code>TenantDbRouter</code> selects pool/database per tenant strategy</td></tr>
                 <tr><td>Repository</td><td>Base <code>TenantAwareRepository</code> adds <code>WHERE tenant_id = ?</code></td></tr>
             </tbody>
         </table>
 
         <h3>Tenant-Scoped Database Queries</h3>
 
-        <p>Always include <code>tenant_id</code> in your queries. The <code>TenantAwareRepository</code> base class enforces this automatically:</p>
+        <p><strong>Preferred: ORM Models.</strong> Set <code>$tenantScoped = true</code> on your model and all queries will automatically include <code>WHERE tenant_id = ?</code>:</p>
+
+        <pre><code class="language-php">use Fabriq\Orm\Model;
+
+class Order extends Model
+{
+    protected string $table = 'orders';
+    protected bool $tenantScoped = true;  // ← auto tenant isolation
+}
+
+// All queries are automatically tenant-scoped:
+$orders = Order::where('status', 'pending')->get();
+$order  = Order::create(['status' => 'new', 'total' => 49.99]);</code></pre>
+
+        <p><strong>Alternative: TenantAwareRepository.</strong> For raw SQL, extend <code>TenantAwareRepository</code>:</p>
 
         <pre><code class="language-php">use Fabriq\Storage\TenantAwareRepository;
 

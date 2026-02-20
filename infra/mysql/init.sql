@@ -6,8 +6,8 @@ CREATE DATABASE IF NOT EXISTS sf_platform CHARACTER SET utf8mb4 COLLATE utf8mb4_
 CREATE DATABASE IF NOT EXISTS sf_app CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- Grant permissions to the app user
-GRANT ALL PRIVILEGES ON sf_platform.* TO 'Fabriq'@'%';
-GRANT ALL PRIVILEGES ON sf_app.* TO 'Fabriq'@'%';
+GRANT ALL PRIVILEGES ON sf_platform.* TO 'fabriq'@'%';
+GRANT ALL PRIVILEGES ON sf_app.* TO 'fabriq'@'%';
 FLUSH PRIVILEGES;
 
 -- ═══════════════════════════════════════════════════════════════

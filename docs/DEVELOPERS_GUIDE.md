@@ -20,17 +20,18 @@ This guide walks you through building a production backend on Fabriq. By the end
 9. [Multi-Tenancy](#9-multi-tenancy)
 10. [Authentication & Security](#10-authentication--security)
 11. [Database & Connection Pools](#11-database--connection-pools)
-12. [WebSocket / Real-Time](#12-websocket--real-time)
-13. [Background Jobs & Queues](#13-background-jobs--queues)
-14. [Event Bus](#14-event-bus)
-15. [Scheduled Jobs](#15-scheduled-jobs)
-16. [Observability](#16-observability)
-17. [Context — The Coroutine-Local Bag](#17-context--the-coroutine-local-bag)
-18. [Live Streaming](#18-live-streaming)
-19. [Game Server](#19-game-server)
-20. [Testing](#20-testing)
-21. [Deployment](#21-deployment)
-22. [Full Example — Building a Todo API](#22-full-example--building-a-todo-api)
+12. [ORM — Models, Queries & Stored Procedures](#12-orm--models-queries--stored-procedures)
+13. [WebSocket / Real-Time](#13-websocket--real-time)
+14. [Background Jobs & Queues](#14-background-jobs--queues)
+15. [Event Bus](#15-event-bus)
+16. [Scheduled Jobs](#16-scheduled-jobs)
+17. [Observability](#17-observability)
+18. [Context — The Coroutine-Local Bag](#18-context--the-coroutine-local-bag)
+19. [Live Streaming](#19-live-streaming)
+20. [Game Server](#20-game-server)
+21. [Testing](#21-testing)
+22. [Deployment](#22-deployment)
+23. [Full Example — Building a Todo API](#23-full-example--building-a-todo-api)
 
 ---
 
@@ -130,6 +131,9 @@ Unlike Hyperf (Spring Boot / Java annotations), Swoft (annotation-heavy), or Mix
 | Event Bus w/ dedup | ❌ | Via Laravel | ❌ | **✅ Built-in** |
 | Multi-tenancy | ❌ | Plugin | ❌ | **✅ Kernel-level** |
 | Tenant-scoped repos | ❌ | ❌ | ❌ | **✅ TenantAwareRepository** |
+| Built-in ORM + Query Builder | Plugin | ✅ (Eloquent) | ❌ | **✅ Custom ORM** |
+| Stored Procedure Support | Manual | Manual | Manual | **✅ Fluent ProcedureCall** |
+| Per-Tenant DB Routing | ❌ | ❌ | ❌ | **✅ TenantDbRouter** |
 | RBAC + ABAC engine | ❌ | Plugin | ❌ | **✅ PolicyEngine** |
 | Idempotency | ❌ | ❌ | ❌ | **✅ IdempotencyStore** |
 | Coroutine Context | ✅ | Partial | ✅ | **✅ + propagation** |
@@ -140,7 +144,7 @@ Unlike Hyperf (Spring Boot / Java annotations), Swoft (annotation-heavy), or Mix
 | Game Server (tick loop + matchmaking) | ❌ | ❌ | ❌ | **✅ Built-in** |
 | UDP Protocol (MessagePack) | ❌ | ❌ | ❌ | **✅ Built-in** |
 
-**In short:** Fabriq is the only Swoole platform that ships multi-tenancy, realtime, queues, events, idempotency, RBAC+ABAC, **live streaming, and a game server engine** as a **unified, coherent system** — with a Laravel-familiar developer experience.
+**In short:** Fabriq is the only Swoole platform that ships multi-tenancy, realtime, queues, events, idempotency, RBAC+ABAC, **a custom ORM with per-tenant DB routing and stored procedures**, **live streaming, and a game server engine** as a **unified, coherent system** — with a Laravel-familiar developer experience.
 
 ---
 
@@ -311,31 +315,86 @@ cd myapp
 composer install
 ```
 
-### Quick Start (Docker)
+### Quick Start (Docker — Recommended)
+
+> **Note:** Swoole does not run natively on Windows. Docker is the recommended (and required on Windows) way to run Fabriq.
 
 ```bash
 # Clone the project
 git clone <repo-url> myapp && cd myapp
 
-# Start MySQL, Redis, and the app container
-cd infra
-docker compose up -d
+# (Optional) Install Composer dependencies locally for IDE autocompletion:
+composer install --ignore-platform-reqs
 
-# The server is now running on http://localhost:8000
+# Start the full stack (app + MySQL + Redis + Adminer)
+docker compose -f infra/docker-compose.yml up -d --build
+```
+
+This starts six containers:
+
+| Container | Service | URL / Port |
+|-----------|---------|------------|
+| `fabriq-app` | Fabriq HTTP + WS server | [http://localhost:8000](http://localhost:8000) |
+| `fabriq-processor` | Queue/event processor | *(background process)* |
+| `fabriq-scheduler` | Cron-like job scheduler | *(background process)* |
+| `fabriq-mysql` | MySQL 8.0 | `localhost:3306` |
+| `fabriq-redis` | Redis 7 | `localhost:6379` |
+| `fabriq-adminer` | Adminer (DB GUI) | [http://localhost:8080](http://localhost:8080) |
+
+All application containers (app, processor, scheduler) start automatically. The processor and scheduler have `restart: unless-stopped` for crash recovery. Wait for MySQL to pass its health check (~15–30s).
+
+```bash
+# Verify the server is running
 curl http://localhost:8000/health
 # → {"status":"ok","service":"Fabriq","timestamp":1740000000,...}
 ```
 
-### Quick Start (Local)
+**Adminer (Database GUI)** — Open [http://localhost:8080](http://localhost:8080):
+
+| Field | Value |
+|-------|-------|
+| System | MySQL / MariaDB |
+| Server | `mysql` |
+| Username | `fabriq` |
+| Password | `sfpass` |
+| Database | `sf_platform` or `sf_app` |
+
+**View logs:**
+
+```bash
+# All containers
+docker compose -f infra/docker-compose.yml logs -f
+
+# Individual services
+docker compose -f infra/docker-compose.yml logs -f app
+docker compose -f infra/docker-compose.yml logs -f processor
+docker compose -f infra/docker-compose.yml logs -f scheduler
+```
+
+**Stop the stack:**
+
+```bash
+docker compose -f infra/docker-compose.yml down
+
+# To also remove all data volumes (full reset):
+docker compose -f infra/docker-compose.yml down -v
+```
+
+### Quick Start (Local — Linux / macOS only)
+
+> Requires PHP 8.2+, Swoole extension, MySQL 8.0+, and Redis 7.x installed locally.
 
 ```bash
 composer install
 
+# Start just the infrastructure via Docker:
+docker compose -f infra/docker-compose.yml up -d mysql redis
+
 # Start the HTTP + WebSocket server
 php bin/fabriq serve
 
-# In another terminal — start the queue worker
-php bin/fabriq worker
+# In another terminal — start the queue processor
+php bin/fabriq processor
 
 # In another terminal — start the scheduler (optional)
 php bin/fabriq scheduler
@@ -346,7 +405,7 @@ php bin/fabriq scheduler
 | Command | Description |
 |---|---|
 | `php bin/fabriq serve [config]` | Start HTTP + WebSocket server |
-| `php bin/fabriq worker [config]` | Start queue consumer workers |
+| `php bin/fabriq processor [config]` | Start queue/event processor |
 | `php bin/fabriq scheduler [config]` | Start the cron-like job scheduler |
 | `php bin/fabriq help` | Show help |
 
@@ -379,6 +438,7 @@ myapp/
 │   ├── redis.php                  # Redis connection settings
 │   ├── auth.php                   # JWT + RBAC roles
 │   ├── tenancy.php                # Resolver chain + cache TTL
+│   ├── orm.php                    # ORM settings, migrations, tenant routing
 │   ├── queue.php                  # Queue consumer groups + retry
 │   ├── events.php                 # Event consumer groups
 │   ├── observability.php          # Log level
@@ -398,6 +458,7 @@ myapp/
 │   ├── http/                      # Router, Request, Response, Middleware, Validator
 │   ├── tenancy/                   # TenantResolver, TenantContext, Cache
 │   ├── storage/                   # Connection pools, DbManager, TenantAwareRepository
+│   ├── orm/                       # ORM: Models, QueryBuilder, Schema, Stored Procedures
 │   ├── realtime/                  # Gateway, Presence, PushService, Subscriber
 │   ├── queue/                     # Dispatcher, Consumer, Scheduler, Idempotency
 │   ├── events/                    # EventBus, EventConsumer, EventSchema
@@ -438,6 +499,7 @@ Configuration in Fabriq follows a convention familiar to Laravel developers: eac
 | `config/redis.php` | `redis.*` | Redis connection settings |
 | `config/auth.php` | `auth.*` | JWT settings + RBAC role definitions |
 | `config/tenancy.php` | `tenancy.*` | Resolver chain + cache TTL |
+| `config/orm.php` | `orm.*` | ORM timestamps, migrations, tenant routing |
 | `config/queue.php` | `queue.*` | Queue consumer group + retry policy |
 | `config/events.php` | `events.*` | Event consumer group |
 | `config/observability.php` | `observability.*` | Log level |
@@ -1158,7 +1220,211 @@ $stats = $dbManager->stats();
 
 ---
 
-## 12. WebSocket / Real-Time
+## 12. ORM — Models, Queries & Stored Procedures
+
+Fabriq ships a custom ORM designed for Swoole's coroutine model. It provides Active Record models, a fluent query builder, stored procedure support, schema migrations, and per-tenant database routing — all coroutine-safe and tenant-aware.
+
+### Query Builder (DB Facade)
+
+```php
+use Fabriq\Orm\DB;
+
+// Select with fluent builder
+$users = DB::table('users')
+    ->select('id', 'name', 'email')
+    ->where('status', 'active')
+    ->where('age', '>=', 18)
+    ->orderBy('name')
+    ->limit(20)
+    ->get();
+
+// Insert
+$id = DB::table('orders')->insert([
+    'id'     => $orderId,
+    'total'  => 99.99,
+    'status' => 'pending',
+]);
+
+// Update
+$affected = DB::table('orders')
+    ->where('id', $orderId)
+    ->update(['status' => 'completed']);
+
+// Delete
+DB::table('orders')->where('id', $orderId)->delete();
+
+// Aggregates
+$count = DB::table('users')->where('status', 'active')->count();
+$total = DB::table('orders')->where('tenant_id', $tid)->sum('total');
+
+// Pagination
+$page = DB::table('users')
+    ->where('status', 'active')
+    ->paginate(perPage: 15, page: 2);
+// $page->items(), $page->total(), $page->currentPage(), $page->lastPage()
+
+// Raw queries
+$rows = DB::raw('SELECT * FROM users WHERE email = ?', [$email]);
+
+// Transactions
+DB::transaction('app', function ($conn) {
+    $conn->query('INSERT INTO messages ...');
+    $conn->query('UPDATE rooms SET ...');
+});
+```
+
+The `QueryBuilder` is **immutable** — each chained method returns a new instance, making it safe to reuse partial queries across coroutines.
+
+### Active Record Models
+
+```php
+<?php
+namespace App\Models;
+
+use Fabriq\Orm\Model;
+
+class Order extends Model
+{
+    protected string $table = 'orders';
+    protected string $primaryKey = 'id';
+    protected bool $tenantScoped = true;
+
+    protected array $fillable = ['status', 'total', 'notes'];
+
+    protected array $casts = [
+        'total' => 'float',
+        'metadata' => 'json',
+    ];
+
+    public function items(): \Fabriq\Orm\Relations\HasMany
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    public function customer(): \Fabriq\Orm\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+}
+```
+
+Usage:
+
+```php
+use App\Models\Order;
+
+// CRUD
+$order = Order::find($id);
+$order = Order::findOrFail($id);
+$orders = Order::where('status', 'pending')->get();
+$order = Order::create(['status' => 'new', 'total' => 49.99]);
+
+$order->status = 'shipped';
+$order->save();
+
+$order->delete();
+
+// Relationships
+$items = $order->items();   // HasMany relation
+$user  = $order->customer(); // BelongsTo relation
+```
+
+When `$tenantScoped = true`, the model automatically adds `WHERE tenant_id = ?` to all queries and injects `tenant_id` on inserts.
+
+### Stored Procedures
+
+```php
+use Fabriq\Orm\DB;
+
+$result = DB::call('sp_get_order_stats')
+    ->in('tenant_id', $tenantId)
+    ->in('start_date', '2026-01-01')
+    ->out('total_orders')
+    ->out('total_revenue')
+    ->exec();
+
+$totalOrders  = $result->out('total_orders');
+$totalRevenue = $result->out('total_revenue');
+$rows         = $result->rows();
+```
+
+Procedure calls are automatically routed to the tenant's database when using `same_server` or `dedicated` strategy.
+
+### Per-Tenant Database Routing
+
+The `TenantDbRouter` dynamically selects the correct connection based on the tenant's configuration:
+
+| Strategy | Behavior |
+|----------|----------|
+| `shared` | All tenants share the `app` pool; isolation via `WHERE tenant_id = ?` |
+| `same_server` | Borrow from `app` pool, `USE <tenant_db>`, restore on release |
+| `dedicated` | Create/cache a dedicated pool for the tenant's MySQL server |
+
+This is transparent to application code — models and the query builder route automatically.
+
+### Schema & Migrations
+
+```php
+use Fabriq\Orm\Schema\Schema;
+use Fabriq\Orm\Schema\Blueprint;
+
+Schema::create('orders', function (Blueprint $table) {
+    $table->uuid('id')->primary();
+    $table->tenantId();
+    $table->string('status', 50)->default('pending');
+    $table->decimal('total', 10, 2);
+    $table->timestamps();
+    $table->index(['tenant_id', 'status']);
+});
+```
+
+Migration files go in `database/migrations/`:
+
+```php
+<?php
+use Fabriq\Orm\Schema\Migration;
+use Fabriq\Orm\Schema\Schema;
+use Fabriq\Orm\Schema\Blueprint;
+
+return new class extends Migration {
+    public function up(): void {
+        Schema::create('orders', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->tenantId();
+            $table->string('status')->default('pending');
+            $table->timestamps();
+        });
+    }
+    public function down(): void {
+        Schema::drop('orders');
+    }
+};
+```
+
+### Configuration
+
+ORM settings live in `config/orm.php`:
+
+```php
+return [
+    'timestamps'      => true,
+    'migration_path'  => 'database/migrations',
+    'migration_table' => 'migrations',
+    'tenant_routing'  => [
+        'default_strategy'    => 'shared',
+        'max_dedicated_pools' => 50,
+        'dedicated_pool'      => [
+            'max_size'       => 10,
+            'borrow_timeout' => 3.0,
+            'idle_timeout'   => 120.0,
+        ],
+    ],
+];
+```
+
+---
+
+## 13. WebSocket / Real-Time
 
 Fabriq runs HTTP and WebSocket on the same port, same server.
 
@@ -1295,7 +1561,7 @@ $presence->onlineCount($tenantId);         // 42
 
 ---
 
-## 13. Background Jobs & Queues
+## 14. Background Jobs & Queues
 
 Jobs use **Redis Streams** with consumer groups, automatic retries, and dead-letter queues.
 
@@ -1334,7 +1600,7 @@ Context (`tenant_id`, `actor_id`, `correlation_id`) is automatically propagated 
 
 ### Handling Jobs
 
-Create `bootstrap/worker.php`:
+Create `bootstrap/processor.php`:
 
 ```php
 <?php
@@ -1361,10 +1627,10 @@ return function (Consumer $consumer, DbManager $db): void {
 };
 ```
 
-Start the worker:
+Start the processor:
 
 ```bash
-php bin/fabriq worker
+php bin/fabriq processor
 ```
 
 ### Retry & Dead Letter Queue
@@ -1378,7 +1644,7 @@ Failed jobs are moved to `sf:dlq:{queueName}` after exhausting retries.
 
 ---
 
-## 14. Event Bus
+## 15. Event Bus
 
 Domain events use **Redis Streams** with consumer group delivery and deduplication.
 
@@ -1433,7 +1699,7 @@ return function (EventConsumer $consumer, DbManager $db): void {
 };
 ```
 
-Events are consumed by the `worker` process (runs alongside queue consumption).
+Events are consumed by the `processor` process (runs alongside queue consumption).
 
 ### Deduplication
 
@@ -1441,7 +1707,7 @@ Each event carries a `dedupeKey`. The `EventConsumer` tracks processed keys in a
 
 ---
 
-## 15. Scheduled Jobs
+## 16. Scheduled Jobs
 
 The scheduler dispatches recurring jobs on a configurable interval.
 
@@ -1495,7 +1761,7 @@ The scheduler also promotes **delayed jobs** (dispatched via `dispatchDelayed()`
 
 ---
 
-## 16. Observability
+## 17. Observability
 
 ### Structured Logging
 
@@ -1561,7 +1827,7 @@ Built-in metrics (registered automatically):
 
 ---
 
-## 17. Context — The Coroutine-Local Bag
+## 18. Context — The Coroutine-Local Bag
 
 Every execution path (HTTP request, WS message, job, event) gets its own isolated `Context`. This prevents state leakage between concurrent requests.
 
@@ -1592,7 +1858,7 @@ Context::all();
 
 ---
 
-## 18. Live Streaming
+## 19. Live Streaming
 
 Fabriq includes a built-in live streaming engine that runs inside the same Swoole process. It supports **WebRTC signaling**, **RTMP-to-HLS transcoding** via FFmpeg, **viewer tracking**, and **chat moderation** — all multi-tenant and coroutine-safe.
 
@@ -1726,7 +1992,7 @@ Register in `config/app.php`:
 
 ---
 
-## 19. Game Server
+## 20. Game Server
 
 Fabriq includes a real-time game server engine that runs inside the same Swoole process. It supports **casual, .io-style, and competitive games** with configurable tick rates, matchmaking, lobbies, and state synchronization.
 
@@ -1891,19 +2157,19 @@ Register in `config/app.php`:
 
 ---
 
-## 20. Testing
+## 21. Testing
 
 ### Running Tests
 
 ```bash
-# All tests
-vendor/bin/phpunit
+# With Docker (recommended)
+docker compose -f infra/docker-compose.yml exec app vendor/bin/phpunit
 
 # Specific test file
-vendor/bin/phpunit tests/Unit/Http/RouterTest.php
+docker compose -f infra/docker-compose.yml exec app vendor/bin/phpunit tests/Unit/Http/RouterTest.php
 
-# With Docker
-docker compose exec app vendor/bin/phpunit
+# Or locally (requires PHP + Swoole)
+vendor/bin/phpunit
 ```
 
 ### Writing Unit Tests
@@ -1954,7 +2220,7 @@ final class ValidationTest extends TestCase
 
 ---
 
-## 21. Deployment
+## 22. Deployment
 
 ### Docker Deployment
 
@@ -1970,13 +2236,15 @@ CMD ["php", "bin/fabriq", "serve"]
 
 ### Running Multiple Processes
 
-In production, run three process types (e.g., as separate containers or supervisord services):
+In production, run three process types as separate containers:
 
 | Process | Command | Scaling |
 |---|---|---|
 | **Web** | `php bin/fabriq serve` | Scale horizontally (load balancer) |
-| **Worker** | `php bin/fabriq worker` | Scale by queue depth |
+| **Processor** | `php bin/fabriq processor` | Scale by queue depth |
 | **Scheduler** | `php bin/fabriq scheduler` | Run exactly ONE instance |
+
+> **Note:** The included `infra/docker-compose.yml` already runs all three process types as separate containers (`app`, `processor`, `scheduler`) for local development. For production, use a similar setup with environment-specific configuration.
 
 ### docker-compose.yml (Production)
 
@@ -1989,9 +2257,9 @@ services:
     deploy:
       replicas: 3
 
-  worker:
+  processor:
     image: myapp:latest
-    command: ["php", "bin/fabriq", "worker", "config/production.php"]
+    command: ["php", "bin/fabriq", "processor", "config/production.php"]
     deploy:
       replicas: 2
 
@@ -2029,7 +2297,7 @@ return [
 
 ---
 
-## 22. Full Example — Building a Todo API
+## 23. Full Example — Building a Todo API
 
 Let's build a complete tenant-scoped Todo API from scratch.
 
@@ -2295,12 +2563,12 @@ curl -X DELETE http://localhost:8000/api/todos/<id> \
 │    └─ onClose            → Gateway::removeConnection          │
 └──────────────────────────────────────────────────────────────┘
 
-┌────────────────────────────┐  ┌─────────────────────────────┐
-│  bin/fabriq worker         │  │  bin/fabriq scheduler        │
-├────────────────────────────┤  ├─────────────────────────────┤
-│  Boot DB pools             │  │  Boot DB pools               │
-│  Load bootstrap/worker.php │  │  Load bootstrap/scheduler.php│
-│  Load bootstrap/events.php │  │  Poll delayed ZSET           │
+┌──────────────────────────────┐  ┌─────────────────────────────┐
+│  bin/fabriq processor        │  │  bin/fabriq scheduler        │
+├──────────────────────────────┤  ├─────────────────────────────┤
+│  Boot DB pools               │  │  Boot DB pools               │
+│  Load bootstrap/processor.php│  │  Load bootstrap/scheduler.php│
+│  Load bootstrap/events.php   │  │  Poll delayed ZSET           │
 │  Consumer::consume()       │  │  Dispatch recurring jobs     │
 │  EventConsumer::consume()  │  │  ∞ loop                      │
 └────────────────────────────┘  └─────────────────────────────┘
@@ -2311,7 +2579,7 @@ curl -X DELETE http://localhost:8000/api/todos/<id> \
 | File | Receives | Purpose |
 |---|---|---|
 | `bootstrap/app.php` | `Application $app` | Register & boot ServiceProviders |
-| `bootstrap/worker.php` | `Consumer $consumer, DbManager $db` | Register job handlers |
+| `bootstrap/processor.php` | `Consumer $consumer, DbManager $db` | Register job handlers |
 | `bootstrap/events.php` | `EventConsumer $consumer, DbManager $db` | Register event handlers |
 | `bootstrap/scheduler.php` | `Scheduler $scheduler, DbManager $db` | Register scheduled jobs |
 
@@ -2330,6 +2598,15 @@ curl -X DELETE http://localhost:8000/api/todos/<id> \
 | `MiddlewareChain` | `Fabriq\Http\MiddlewareChain` | Middleware pipeline |
 | `DbManager` | `Fabriq\Storage\DbManager` | Connection pool manager |
 | `TenantAwareRepository` | `Fabriq\Storage\TenantAwareRepository` | Base repo with tenant enforcement |
+| `DB` | `Fabriq\Orm\DB` | Static database facade (query builder, raw, transactions) |
+| `Model` | `Fabriq\Orm\Model` | Active Record base class |
+| `QueryBuilder` | `Fabriq\Orm\QueryBuilder` | Fluent SQL query builder |
+| `ProcedureCall` | `Fabriq\Orm\ProcedureCall` | Stored procedure builder |
+| `Collection` | `Fabriq\Orm\Collection` | Typed array wrapper for results |
+| `Schema` | `Fabriq\Orm\Schema\Schema` | DDL operations (create, alter, drop) |
+| `Blueprint` | `Fabriq\Orm\Schema\Blueprint` | Table definition DSL |
+| `MigrationRunner` | `Fabriq\Orm\Schema\MigrationRunner` | Run/rollback migrations |
+| `TenantDbRouter` | `Fabriq\Orm\TenantDbRouter` | Per-tenant database routing |
 | `TenantResolver` | `Fabriq\Tenancy\TenantResolver` | Multi-tenant resolution |
 | `TenantContext` | `Fabriq\Tenancy\TenantContext` | Tenant value object |
 | `JwtAuthenticator` | `Fabriq\Security\JwtAuthenticator` | JWT encode/decode |

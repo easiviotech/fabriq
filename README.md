@@ -8,7 +8,7 @@
 
 ## Architecture
 
-Fabriq is a **long-running Swoole server** that hosts HTTP, WebSocket, UDP, queue workers, event consumers, live streaming, and a game server engine in a single process. Every execution path enforces `TenantContext` — tenant isolation is guaranteed at the kernel level.
+Fabriq is a **long-running Swoole server** that hosts HTTP, WebSocket, UDP, queue processors, event consumers, live streaming, and a game server engine in a single process. Every execution path enforces `TenantContext` — tenant isolation is guaranteed at the kernel level.
 
 ```
 Client → HTTP/WS/UDP → Middleware Chain → Route Handler → DB/Redis (tenant-scoped)
@@ -83,32 +83,118 @@ Client → HTTP/WS/UDP → Middleware Chain → Route Handler → DB/Redis (tena
 
 ---
 
-## Quick Start
+## Quick Start (Docker — Recommended)
 
-### 1. Start infrastructure
+> **Note:** Swoole does not run natively on Windows. Docker is the recommended way to run Fabriq on all platforms.
+
+### 1. Clone the project
+
 ```bash
-cd infra
-docker compose up -d
+git clone <repo-url> myapp
+cd myapp
 ```
 
-### 2. Start server
+### 2. Install Composer dependencies
+
 ```bash
-docker exec -it fabriq-app php bin/fabriq serve
+# If you have PHP locally (any platform):
+composer install --ignore-platform-reqs
+
+# Or skip this — Docker will install dependencies during the build.
 ```
 
-### 3. Start worker (separate terminal)
+### 3. Start the full stack
+
+From the **project root**, run:
+
 ```bash
-docker exec -it fabriq-app php bin/fabriq worker
+docker compose -f infra/docker-compose.yml up -d --build
 ```
 
-### 4. Create a tenant
+This builds the app image (PHP 8.3 + Swoole + Redis extension) and starts **six containers**:
+
+| Container | Service | URL / Port |
+|-----------|---------|------------|
+| `fabriq-app` | Fabriq HTTP + WS server | [http://localhost:8000](http://localhost:8000) |
+| `fabriq-processor` | Queue/event processor | *(background process)* |
+| `fabriq-scheduler` | Cron-like job scheduler | *(background process)* |
+| `fabriq-mysql` | MySQL 8.0 | `localhost:3306` |
+| `fabriq-redis` | Redis 7 | `localhost:6379` |
+| `fabriq-adminer` | Adminer (DB GUI) | [http://localhost:8080](http://localhost:8080) |
+
+All application containers (app, worker, scheduler) start automatically. The worker and scheduler have `restart: unless-stopped` for crash recovery. Wait for MySQL to pass its health check (~15–30 seconds) before the services connect.
+
+### 4. Verify the server is running
+
+```bash
+curl http://localhost:8000/health
+# {"status":"ok","service":"Fabriq","timestamp":...,"worker_id":0}
+```
+
+### 5. Access the database via Adminer
+
+Open [http://localhost:8080](http://localhost:8080) and log in with:
+
+| Field | Value |
+|-------|-------|
+| System | MySQL / MariaDB |
+| Server | `mysql` |
+| Username | `fabriq` |
+| Password | `sfpass` |
+| Database | `sf_platform` or `sf_app` |
+
+### 6. View logs
+
+```bash
+# All containers
+docker compose -f infra/docker-compose.yml logs -f
+
+# Individual services
+docker compose -f infra/docker-compose.yml logs -f app
+docker compose -f infra/docker-compose.yml logs -f worker
+docker compose -f infra/docker-compose.yml logs -f scheduler
+```
+
+### 7. Create a tenant
+
 ```bash
 curl -X POST http://localhost:8000/api/tenants \
   -H "Content-Type: application/json" \
   -d '{"name":"Acme","slug":"acme"}'
 ```
 
-### 5. Health check
+### Stopping the stack
+
+```bash
+docker compose -f infra/docker-compose.yml down
+
+# To also remove all data volumes (full reset):
+docker compose -f infra/docker-compose.yml down -v
+```
+
+---
+
+## Quick Start (Local — Linux / macOS only)
+
+> Requires PHP 8.2+, Swoole extension, MySQL 8.0+, and Redis 7.x installed locally.
+
+```bash
+composer install
+
+# Start MySQL and Redis (or use Docker for just the infrastructure):
+docker compose -f infra/docker-compose.yml up -d mysql redis
+
+# Start the HTTP + WebSocket server
+php bin/fabriq serve
+
+# In another terminal — start the queue processor
+php bin/fabriq processor
+
+# In another terminal — start the scheduler (optional)
+php bin/fabriq scheduler
+```
+
+### Health check
 ```bash
 curl http://localhost:8000/health
 # {"status":"ok","timestamp":...,"worker_id":0}
@@ -121,7 +207,7 @@ curl http://localhost:8000/health
 | Command | Description |
 |---------|-------------|
 | `bin/fabriq serve` | Start HTTP + WS + UDP server (with streaming & gaming if enabled) |
-| `bin/fabriq worker` | Start queue consumers |
+| `bin/fabriq processor` | Start queue/event processor |
 | `bin/fabriq scheduler` | Start job scheduler |
 
 ---
@@ -169,11 +255,14 @@ Exposed at `GET /metrics`. Key built-in metrics include:
 ## Testing
 
 ```bash
-# Run all unit tests
-docker compose exec app vendor/bin/phpunit
+# Run all unit tests (inside Docker)
+docker compose -f infra/docker-compose.yml exec app vendor/bin/phpunit
 
 # Specific test
-docker compose exec app vendor/bin/phpunit tests/Unit/Kernel/ContextTest.php
+docker compose -f infra/docker-compose.yml exec app vendor/bin/phpunit tests/Unit/Kernel/ContextTest.php
+
+# Or if you have PHP + Swoole locally:
+vendor/bin/phpunit
 ```
 
 ---
@@ -190,6 +279,7 @@ docker compose exec app vendor/bin/phpunit tests/Unit/Kernel/ContextTest.php
 | [IDEMPOTENCY.md](docs/IDEMPOTENCY.md) | Idempotency keys, dedupe, storage layers |
 | [SECURITY.md](docs/SECURITY.md) | JWT/API key auth, RBAC/ABAC policy engine |
 | [OPERATIONS.md](docs/OPERATIONS.md) | Health, metrics, logging, tracing |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Production deployment guide (Docker, K8s, cloud, TLS) |
 
 ### Docs Site
 
@@ -210,6 +300,7 @@ The `docs-site/` directory contains a full HTML documentation site with syntax-h
 | `streaming.html` | Live Streaming (WebRTC, HLS, transcoding, chat moderation) |
 | `gaming.html` | Game Server (tick loop, matchmaking, lobbies, state sync) |
 | `operations.html` | Operations (logging, metrics, testing, deployment) |
+| `deployment.html` | Production Deployment (Docker, Kubernetes, cloud, TLS, checklist) |
 
 ---
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Fabriq\Kernel;
 
+use Fabriq\Tenancy\TenantContext;
 use Swoole\Coroutine;
 
 /**
@@ -59,6 +60,27 @@ final class Context
     public static function actorId(): ?string
     {
         return self::get('actor_id');
+    }
+
+    /**
+     * Get the full TenantContext for the current coroutine.
+     *
+     * Stored via setExtra('tenant_context', $ctx) during tenant resolution.
+     * Returns null if no tenant has been resolved.
+     */
+    public static function tenant(): ?TenantContext
+    {
+        $ctx = self::getExtra('tenant_context');
+        return $ctx instanceof TenantContext ? $ctx : null;
+    }
+
+    /**
+     * Store the resolved TenantContext for the current coroutine.
+     */
+    public static function setTenant(TenantContext $tenant): void
+    {
+        self::setTenantId($tenant->id);
+        self::setExtra('tenant_context', $tenant);
     }
 
     /**

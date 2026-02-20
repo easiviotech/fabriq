@@ -4,108 +4,113 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Models\ApiKey;
+use App\Models\Message;
+use App\Models\Room;
+use App\Models\Tenant;
+use App\Models\User;
+use Fabriq\Orm\DB;
+
 /**
  * Chat repository — all queries enforce tenant_id.
  *
- * Backed by in-memory arrays for demo purposes.
- * In production, swap with DbManager-backed queries
- * or extend TenantAwareRepository.
+ * Delegates to ORM Model classes for database access.
+ * Tenant scoping is automatic via HasTenantScope on each model.
  */
 final class ChatRepository
 {
-    /** @var array<string, array> In-memory data stores keyed by table name */
-    private array $tables = [
-        'tenants' => [],
-        'api_keys' => [],
-        'users' => [],
-        'rooms' => [],
-        'room_members' => [],
-        'messages' => [],
-    ];
-
     // ── Platform (no tenant scope) ───────────────────────────────────
 
     public function createTenant(array $tenant, array $apiKey): void
     {
-        $this->tables['tenants'][$tenant['id']] = $tenant;
-        $this->tables['api_keys'][] = [
+        Tenant::create([
+            'id' => $tenant['id'],
+            'slug' => $tenant['slug'],
+            'name' => $tenant['name'],
+            'plan' => $tenant['plan'] ?? 'free',
+            'status' => $tenant['status'] ?? 'active',
+            'config_json' => $tenant['config_json'] ?? null,
+        ]);
+
+        ApiKey::create([
             'id' => 'ak-' . bin2hex(random_bytes(4)),
             'tenant_id' => $tenant['id'],
-            'prefix' => $apiKey['prefix'],
+            'key_prefix' => $apiKey['prefix'],
             'key_hash' => $apiKey['hash'],
+            'name' => 'default',
             'scopes' => '["*"]',
-        ];
+        ]);
     }
 
     public function findTenantBySlug(string $slug): ?array
     {
-        foreach ($this->tables['tenants'] as $tenant) {
-            if ($tenant['slug'] === $slug) {
-                return $tenant;
-            }
-        }
-        return null;
+        $tenant = Tenant::where('slug', $slug)->first();
+        return $tenant?->toArray();
     }
 
     public function findApiKeyByPrefix(string $prefix): ?array
     {
-        foreach ($this->tables['api_keys'] as $key) {
-            if ($key['prefix'] === $prefix) {
-                return $key;
-            }
-        }
-        return null;
+        $key = ApiKey::where('key_prefix', $prefix)->first();
+        return $key?->toArray();
     }
 
     // ── Tenant-scoped (enforce tenant_id) ────────────────────────────
 
     public function createUser(array $user): void
     {
-        if (empty($user['tenant_id'])) {
-            throw new \RuntimeException('tenant_id is required for user creation');
-        }
-        $this->tables['users'][$user['id']] = $user;
+        User::create([
+            'id' => $user['id'],
+            'tenant_id' => $user['tenant_id'],
+            'name' => $user['name'],
+            'email' => $user['email'],
+            'password_hash' => $user['password_hash'] ?? null,
+            'status' => $user['status'] ?? 'active',
+        ]);
     }
 
     public function createRoom(array $room): void
     {
-        if (empty($room['tenant_id'])) {
-            throw new \RuntimeException('tenant_id is required for room creation');
-        }
-        $this->tables['rooms'][$room['id']] = $room;
+        Room::create([
+            'id' => $room['id'],
+            'tenant_id' => $room['tenant_id'],
+            'name' => $room['name'],
+            'created_by' => $room['created_by'],
+        ]);
     }
 
     public function listRooms(string $tenantId): array
     {
-        return array_values(array_filter(
-            $this->tables['rooms'],
-            fn(array $r) => $r['tenant_id'] === $tenantId
-        ));
+        return Room::query()->get()->toArray();
     }
 
     public function joinRoom(string $tenantId, string $roomId, string $userId): void
     {
-        $this->tables['room_members'][] = [
-            'tenant_id' => $tenantId,
-            'room_id' => $roomId,
-            'user_id' => $userId,
-        ];
+        DB::table('room_members')
+            ->tenantScoped(true)
+            ->insert([
+                'tenant_id' => $tenantId,
+                'room_id' => $roomId,
+                'user_id' => $userId,
+            ]);
     }
 
     public function createMessage(array $message): void
     {
-        if (empty($message['tenant_id'])) {
-            throw new \RuntimeException('tenant_id is required for message creation');
-        }
-        $this->tables['messages'][$message['id']] = $message;
+        Message::create([
+            'id' => $message['id'],
+            'tenant_id' => $message['tenant_id'],
+            'room_id' => $message['room_id'],
+            'user_id' => $message['user_id'],
+            'body' => $message['body'],
+        ]);
     }
 
     public function listMessages(string $tenantId, string $roomId): array
     {
-        return array_values(array_filter(
-            $this->tables['messages'],
-            fn(array $m) => $m['tenant_id'] === $tenantId && $m['room_id'] === $roomId
-        ));
+        return Message::where('room_id', $roomId)
+            ->orderBy('created_at', 'ASC')
+            ->get()
+            ->toArray();
     }
 
     /**
@@ -113,10 +118,6 @@ final class ChatRepository
      */
     public function messageCount(string $tenantId, string $roomId): int
     {
-        return count(array_filter(
-            $this->tables['messages'],
-            fn(array $m) => $m['tenant_id'] === $tenantId && $m['room_id'] === $roomId
-        ));
+        return Message::where('room_id', $roomId)->count();
     }
 }
-

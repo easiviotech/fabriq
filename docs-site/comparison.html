@@ -258,6 +258,27 @@ $result = $store->once(
                     <td><strong>&check; TenantAwareRepository</strong></td>
                 </tr>
                 <tr>
+                    <td>Built-in ORM + Query Builder</td>
+                    <td>Plugin</td>
+                    <td>&check; (Eloquent)</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; Custom ORM</strong></td>
+                </tr>
+                <tr>
+                    <td>Stored Procedure Support</td>
+                    <td>Manual</td>
+                    <td>Manual</td>
+                    <td>Manual</td>
+                    <td><strong>&check; Fluent ProcedureCall</strong></td>
+                </tr>
+                <tr>
+                    <td>Per-Tenant DB Routing</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; TenantDbRouter</strong></td>
+                </tr>
+                <tr>
                     <td>RBAC + ABAC engine</td>
                     <td>&cross;</td>
                     <td>Plugin</td>
@@ -326,7 +347,7 @@ $result = $store->once(
         <!-- ── Summary ─────────────────────────────────────────────────── -->
         <h2 id="summary">Summary</h2>
 
-        <p>Fabriq is the only Swoole platform that ships <strong>multi-tenancy, realtime, queues, events, idempotency, RBAC+ABAC, live streaming, and a game server engine as a unified, coherent system</strong> &mdash; with a Laravel-familiar developer experience.</p>
+        <p>Fabriq is the only Swoole platform that ships <strong>multi-tenancy, a custom ORM with per-tenant DB routing and stored procedures, realtime, queues, events, idempotency, RBAC+ABAC, live streaming, and a game server engine as a unified, coherent system</strong> &mdash; with a Laravel-familiar developer experience.</p>
 
         <p>Everything else in the ecosystem requires you to glue together separate packages and handle tenant isolation, cross-worker routing, idempotency, streaming infrastructure, and game server logic yourself.</p>
 

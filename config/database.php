@@ -18,8 +18,8 @@ return [
         'host' => 'mysql',
         'port' => 3306,
         'database' => 'sf_platform',
-        'username' => 'Fabriq',
-        'password' => '', // Set via env or override config
+        'username' => 'fabriq',
+        'password' => 'sfpass',
         'charset' => 'utf8mb4',
         'pool' => [
             'max_size' => 20,
@@ -37,8 +37,8 @@ return [
         'host' => 'mysql',
         'port' => 3306,
         'database' => 'sf_app',
-        'username' => 'Fabriq',
-        'password' => '',
+        'username' => 'fabriq',
+        'password' => 'sfpass',
         'charset' => 'utf8mb4',
         'pool' => [
             'max_size' => 20,

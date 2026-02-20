@@ -193,28 +193,100 @@ composer install</code></pre>
 
         <h3>Docker (Recommended)</h3>
 
+        <div class="callout warning">
+            <div class="callout-title">Windows Users</div>
+            <p>Swoole does not run natively on Windows. Docker is <strong>required</strong> to run Fabriq on Windows. Make sure Docker Desktop is running before proceeding.</p>
+        </div>
+
         <pre><code class="language-bash"># Clone the project
-git clone &lt;repo-url&gt; myapp && cd myapp
+git clone &lt;repo-url&gt; myapp &amp;&amp; cd myapp
 
-# Start MySQL, Redis, and the app container
-cd infra
-docker compose up -d
+# (Optional) Install dependencies locally for IDE autocompletion:
+composer install --ignore-platform-reqs
 
-# The server is now running on http://localhost:8000
-curl http://localhost:8000/health
-# → {"status":"ok","service":"Fabriq","timestamp":1740000000,...}</code></pre>
+# Start the full stack (app + MySQL + Redis + Adminer)
+docker compose -f infra/docker-compose.yml up -d --build</code></pre>
 
-        <h3>Local Development</h3>
+        <p>This starts six containers:</p>
+
+        <table>
+            <thead>
+                <tr><th>Container</th><th>Service</th><th>URL / Port</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>fabriq-app</code></td><td>Fabriq HTTP + WS server</td><td><a href="http://localhost:8000">http://localhost:8000</a></td></tr>
+                <tr><td><code>fabriq-processor</code></td><td>Queue/event processor</td><td><em>(background process)</em></td></tr>
+                <tr><td><code>fabriq-scheduler</code></td><td>Cron-like job scheduler</td><td><em>(background process)</em></td></tr>
+                <tr><td><code>fabriq-mysql</code></td><td>MySQL 8.0</td><td><code>localhost:3306</code></td></tr>
+                <tr><td><code>fabriq-redis</code></td><td>Redis 7</td><td><code>localhost:6379</code></td></tr>
+                <tr><td><code>fabriq-adminer</code></td><td>Adminer (DB GUI)</td><td><a href="http://localhost:8080">http://localhost:8080</a></td></tr>
+            </tbody>
+        </table>
+
+        <p>All application containers (app, processor, scheduler) start automatically. The processor and scheduler have <code>restart: unless-stopped</code> for crash recovery. Wait for MySQL to pass its health check (~15&ndash;30s), then verify:</p>
+
+        <pre><code class="language-bash">curl http://localhost:8000/health
+# &rarr; {"status":"ok","service":"Fabriq","timestamp":1740000000,...}</code></pre>
+
+        <h4>Accessing the Database (Adminer)</h4>
+
+        <p>Open <a href="http://localhost:8080">http://localhost:8080</a> and log in:</p>
+
+        <table>
+            <thead>
+                <tr><th>Field</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>System</td><td>MySQL / MariaDB</td></tr>
+                <tr><td>Server</td><td><code>mysql</code></td></tr>
+                <tr><td>Username</td><td><code>fabriq</code></td></tr>
+                <tr><td>Password</td><td><code>sfpass</code></td></tr>
+                <tr><td>Database</td><td><code>sf_platform</code> or <code>sf_app</code></td></tr>
+            </tbody>
+        </table>
+
+        <div class="callout tip">
+            <div class="callout-title">Important</div>
+            <p>The server name in Adminer must be <code>mysql</code> (the Docker service name), not <code>localhost</code> or <code>db</code>.</p>
+        </div>
+
+        <h4>View Logs</h4>
+
+        <pre><code class="language-bash"># All containers
+docker compose -f infra/docker-compose.yml logs -f
+
+# Individual services
+docker compose -f infra/docker-compose.yml logs -f app
+docker compose -f infra/docker-compose.yml logs -f processor
+docker compose -f infra/docker-compose.yml logs -f scheduler</code></pre>
+
+        <h4>Stopping the Stack</h4>
+
+        <pre><code class="language-bash"># Stop containers (preserves data)
+docker compose -f infra/docker-compose.yml down
+
+# Stop and remove all data volumes (full reset)
+docker compose -f infra/docker-compose.yml down -v</code></pre>
+
+        <h3>Local Development (Linux / macOS only)</h3>
+
+        <div class="callout info">
+            <div class="callout-title">Requirements</div>
+            <p>Requires PHP 8.2+, the Swoole extension, MySQL 8.0+, and Redis 7.x installed locally.</p>
+        </div>
 
         <pre><code class="language-bash">composer install
+
+# Start just MySQL + Redis via Docker:
+docker compose -f infra/docker-compose.yml up -d mysql redis
 
 # Start the HTTP + WebSocket server
 php bin/fabriq serve
 
-# In another terminal — start the queue worker
-php bin/fabriq worker
+# In another terminal &mdash; start the queue processor
+php bin/fabriq processor
 
-# In another terminal — start the scheduler (optional)
+# In another terminal &mdash; start the scheduler (optional)
 php bin/fabriq scheduler</code></pre>
 
         <div class="callout tip">
@@ -231,7 +303,7 @@ php bin/fabriq scheduler</code></pre>
             </thead>
             <tbody>
                 <tr><td><code>php bin/fabriq serve [config]</code></td><td>Start HTTP + WebSocket + UDP server (with streaming &amp; gaming if enabled)</td></tr>
-                <tr><td><code>php bin/fabriq worker [config]</code></td><td>Start queue consumer workers</td></tr>
+                <tr><td><code>php bin/fabriq processor [config]</code></td><td>Start queue/event processor</td></tr>
                 <tr><td><code>php bin/fabriq scheduler [config]</code></td><td>Start the cron-like job scheduler</td></tr>
                 <tr><td><code>php bin/fabriq help</code></td><td>Show help</td></tr>
             </tbody>
@@ -286,6 +358,7 @@ php bin/fabriq scheduler</code></pre>
 │   ├── redis.php                  # Redis connection settings
 │   ├── auth.php                   # JWT + RBAC roles
 │   ├── tenancy.php                # Resolver chain + cache TTL
+│   ├── orm.php                    # ORM settings, migrations, tenant routing
 │   ├── queue.php                  # Queue consumer groups + retry
 │   ├── events.php                 # Event consumer groups
 │   ├── observability.php          # Log level
@@ -305,6 +378,7 @@ php bin/fabriq scheduler</code></pre>
 │   ├── http/                      # Router, Request, Response, Middleware, Validator
 │   ├── tenancy/                   # TenantResolver, TenantContext, Cache
 │   ├── storage/                   # Connection pools, DbManager, TenantAwareRepository
+│   ├── orm/                       # ORM: Models, QueryBuilder, Schema, Stored Procedures
 │   ├── realtime/                  # Gateway, Presence, PushService, Subscriber
 │   ├── queue/                     # Dispatcher, Consumer, Scheduler, Idempotency
 │   ├── events/                    # EventBus, EventConsumer, EventSchema
@@ -327,6 +401,7 @@ php bin/fabriq scheduler</code></pre>
     "autoload": {
         "psr-4": {
             "App\\": "app/",
+            "Fabriq\\Orm\\": "packages/orm/src/",
             "Fabriq\\Streaming\\": "packages/streaming/src/",
             "Fabriq\\Gaming\\": "packages/gaming/src/"
         }
@@ -344,6 +419,7 @@ php bin/fabriq scheduler</code></pre>
                 <tr><td><strong>Kernel</strong></td><td><code>packages/kernel/</code></td><td>Swoole server bootstrap, Context (coroutine-local), Config, Container, Application</td></tr>
                 <tr><td><strong>Tenancy</strong></td><td><code>packages/tenancy/</code></td><td>TenantResolver, TenantContext, TenantConfigCache</td></tr>
                 <tr><td><strong>Storage</strong></td><td><code>packages/storage/</code></td><td>Connection pools (Channel-based), DbManager, TenantAwareRepository</td></tr>
+                <tr><td><strong>ORM</strong></td><td><code>packages/orm/</code></td><td>DB facade, QueryBuilder, Model (Active Record), ProcedureCall, TenantDbRouter, Schema, MigrationRunner, Collection</td></tr>
                 <tr><td><strong>HTTP</strong></td><td><code>packages/http/</code></td><td>Router, Request/Response wrappers, MiddlewareChain, Validator</td></tr>
                 <tr><td><strong>Realtime</strong></td><td><code>packages/realtime/</code></td><td>Gateway (fd mapping), Presence, PushService, RealtimeSubscriber</td></tr>
                 <tr><td><strong>Queue</strong></td><td><code>packages/queue/</code></td><td>Dispatcher, Consumer (retry/DLQ), Scheduler, IdempotencyStore</td></tr>

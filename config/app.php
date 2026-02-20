@@ -34,6 +34,7 @@ return [
         \App\Providers\RealtimeServiceProvider::class,
         \App\Providers\StreamingServiceProvider::class,
         \App\Providers\GamingServiceProvider::class,
+        \App\Providers\OrmServiceProvider::class,
     ],
 ];
 

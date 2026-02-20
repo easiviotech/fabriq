@@ -38,6 +38,7 @@
                 <tr><td><code>config/redis.php</code></td><td><code>redis.*</code></td><td>Redis connection settings</td></tr>
                 <tr><td><code>config/auth.php</code></td><td><code>auth.*</code></td><td>JWT settings + RBAC role definitions</td></tr>
                 <tr><td><code>config/tenancy.php</code></td><td><code>tenancy.*</code></td><td>Resolver chain + cache TTL</td></tr>
+                <tr><td><code>config/orm.php</code></td><td><code>orm.*</code></td><td>ORM timestamps, migrations, tenant DB routing</td></tr>
                 <tr><td><code>config/queue.php</code></td><td><code>queue.*</code></td><td>Queue consumer group + retry policy</td></tr>
                 <tr><td><code>config/events.php</code></td><td><code>events.*</code></td><td>Event consumer group</td></tr>
                 <tr><td><code>config/observability.php</code></td><td><code>observability.*</code></td><td>Log level</td></tr>
@@ -66,11 +67,11 @@ declare(strict_types=1);
 
 return [
     'platform' => [
-        'host'     => 'mysql',
+        'host'     => 'mysql',       // Docker service name (use 'localhost' if running locally)
         'port'     => 3306,
         'database' => 'sf_platform',
         'username' => 'fabriq',
-        'password' => '',
+        'password' => 'sfpass',      // Must match MYSQL_PASSWORD in docker-compose.yml
         'charset'  => 'utf8mb4',
         'pool'     => ['max_size' => 20, 'borrow_timeout' => 3.0, 'idle_timeout' => 60.0],
     ],
@@ -79,7 +80,7 @@ return [
         'port'     => 3306,
         'database' => 'sf_app',
         'username' => 'fabriq',
-        'password' => '',
+        'password' => 'sfpass',
         'charset'  => 'utf8mb4',
         'pool'     => ['max_size' => 20, 'borrow_timeout' => 3.0, 'idle_timeout' => 60.0],
     ],
@@ -147,7 +148,7 @@ declare(strict_types=1);
 return [
     'enabled'    => true,
     'udp_port'   => 8001,
-    'tick_rates'  => ['casual' => 10, 'realtime' => 30, 'competitive' => 60],
+    'tick_rates'  => ['casual' => 10, 'mmo' => 20, 'realtime' => 30, 'moba' => 45, 'competitive' => 60, 'twitch' => 128],
     'max_rooms_per_worker'  => 100,
     'max_players_per_room'  => 64,
     'matchmaking' => [
@@ -157,6 +158,26 @@ return [
     ],
     'reconnection_window_seconds' => 30,
     'protocol' => 'msgpack',   // 'json' | 'msgpack'
+];</code></pre>
+
+        <h3>config/orm.php</h3>
+        <pre><code class="language-php">&lt;?php
+declare(strict_types=1);
+
+return [
+    'timestamps'      =&gt; true,             // Auto-manage created_at / updated_at
+    'migration_path'  =&gt; 'database/migrations',
+    'migration_table' =&gt; 'migrations',
+
+    'tenant_routing' =&gt; [
+        'default_strategy'    =&gt; 'shared',  // 'shared' | 'same_server' | 'dedicated'
+        'max_dedicated_pools' =&gt; 50,        // LRU cache size for dedicated tenant pools
+        'dedicated_pool'      =&gt; [
+            'max_size'       =&gt; 10,
+            'borrow_timeout' =&gt; 3.0,
+            'idle_timeout'   =&gt; 120.0,
+        ],
+    ],
 ];</code></pre>
 
         <!-- ── Dot Notation ────────────────────────────────────────── -->

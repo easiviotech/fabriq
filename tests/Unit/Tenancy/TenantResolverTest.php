@@ -8,12 +8,13 @@ use PHPUnit\Framework\TestCase;
 use Fabriq\Tenancy\TenantContext;
 use Fabriq\Tenancy\TenantResolver;
 use Fabriq\Tenancy\TenantConfigCache;
+use Swoole\Http\Request as SwooleRequest;
 use RuntimeException;
 
 /**
  * Tests for TenantResolver — chain resolution of tenant from request.
  *
- * Uses a mock Swoole request object (stdClass with matching properties).
+ * Uses real Swoole\Http\Request instances with manually set properties.
  */
 final class TenantResolverTest extends TestCase
 {
@@ -47,9 +48,9 @@ final class TenantResolverTest extends TestCase
         };
     }
 
-    private function makeSwooleRequest(array $headers = [], string $uri = '/'): object
+    private function makeSwooleRequest(array $headers = [], string $uri = '/'): SwooleRequest
     {
-        $request = new \stdClass();
+        $request = new SwooleRequest();
         $request->header = $headers;
         $request->server = ['request_uri' => $uri];
         return $request;

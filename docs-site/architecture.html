@@ -20,7 +20,7 @@
     <div id="docs-content-inner" class="docs-content">
 
         <h1>Architecture</h1>
-        <p>Fabriq is a unified Swoole runtime that consolidates HTTP APIs, WebSocket gateway, queue workers, event consumers, live streaming, and a game server engine into a single deployable process.</p>
+        <p>Fabriq is a unified Swoole runtime that consolidates HTTP APIs, WebSocket gateway, queue processor, event consumers, live streaming, and a game server engine into a single deployable process.</p>
 
         <!-- ── Overview ────────────────────────────────────────────── -->
         <h2 id="overview">Overview</h2>
@@ -30,7 +30,7 @@
         <ul>
             <li><strong>HTTP API server</strong> &mdash; REST endpoints with middleware pipeline</li>
             <li><strong>WebSocket gateway</strong> &mdash; realtime push and presence</li>
-            <li><strong>Queue workers</strong> &mdash; Redis Streams with retry and DLQ</li>
+            <li><strong>Queue processor</strong> &mdash; Redis Streams with retry and DLQ</li>
             <li><strong>Event consumers</strong> &mdash; publish/subscribe with deduplication</li>
             <li><strong>Live streaming</strong> &mdash; WebRTC signaling, FFmpeg transcoding (RTMP &rarr; HLS), viewer tracking, chat moderation</li>
             <li><strong>Game server</strong> &mdash; fixed tick-rate game loop, UDP protocol, matchmaking, lobbies, state sync</li>
@@ -55,8 +55,13 @@
 │   HTTP Handler ──→ Middleware Chain ──→ Router ──→ Handlers  │
 │   WS Handler ───→ Gateway                    │              │
 │   UDP Handler ──→ UdpProtocol                ├──→ DbManager │
-│                                              ├──→ EventBus  │
-│   Streaming ────→ SignalingHandler            ├──→ PushSvc   │
+│                                              ├──→ ORM       │
+│   ORM ──────────→ QueryBuilder               │  (DB facade, │
+│                  Model (Active Record)       │   Models,    │
+│                  TenantDbRouter              ├──→ EventBus  │
+│                  ProcedureCall               ├──→ PushSvc   │
+│                                              │              │
+│   Streaming ────→ SignalingHandler            │              │
 │                  TranscodingPipeline (FFmpeg) │              │
 │                  HlsManager                  │              │
 │                                              │              │
@@ -78,7 +83,7 @@
 
         <ol>
             <li><code>HTTP POST /api/rooms/{id}/messages</code> &rarr; AuthMiddleware &rarr; TenancyMiddleware &rarr; Handler</li>
-            <li>Handler persists message (MySQL, <code>tenant_id</code> enforced)</li>
+            <li>Handler persists message via ORM (MySQL, <code>tenant_id</code> auto-injected by <code>HasTenantScope</code>)</li>
             <li>Handler emits <code>MessageSent</code> event (Redis Stream)</li>
             <li>Handler calls <code>PushService.pushRoom()</code> (Redis PUBLISH)</li>
             <li>Gateway workers receive pub/sub &rarr; push to local WS fds</li>
@@ -144,12 +149,12 @@
 │    └─ onUdpPacket        → UdpProtocol → GameRoom input      │
 └──────────────────────────────────────────────────────────────┘
 
-┌────────────────────────────┐  ┌─────────────────────────────┐
-│  bin/fabriq worker         │  │  bin/fabriq scheduler        │
-├────────────────────────────┤  ├─────────────────────────────┤
-│  Boot DB pools             │  │  Boot DB pools               │
-│  Load bootstrap/worker.php │  │  Load bootstrap/scheduler    │
-│  Load bootstrap/events.php │  │  Poll delayed ZSET           │
+┌──────────────────────────────┐  ┌─────────────────────────────┐
+│  bin/fabriq processor        │  │  bin/fabriq scheduler        │
+├──────────────────────────────┤  ├─────────────────────────────┤
+│  Boot DB pools               │  │  Boot DB pools               │
+│  Load bootstrap/processor.php│  │  Load bootstrap/scheduler    │
+│  Load bootstrap/events.php   │  │  Poll delayed ZSET           │
 │  Consumer::consume()       │  │  Dispatch recurring jobs     │
 │  EventConsumer::consume()  │  │  ∞ loop                      │
 └────────────────────────────┘  └─────────────────────────────┘</code></pre>
@@ -188,7 +193,7 @@
             </thead>
             <tbody>
                 <tr><td><code>bootstrap/app.php</code></td><td>&mdash;</td><td>Creates <code>Application</code>, registers providers, boots</td></tr>
-                <tr><td><code>bootstrap/worker.php</code></td><td><code>Consumer $consumer, DbManager $db</code></td><td>Register job handlers</td></tr>
+                <tr><td><code>bootstrap/processor.php</code></td><td><code>Consumer $consumer, DbManager $db</code></td><td>Register job handlers</td></tr>
                 <tr><td><code>bootstrap/events.php</code></td><td><code>EventConsumer $consumer, DbManager $db</code></td><td>Register event handlers</td></tr>
                 <tr><td><code>bootstrap/scheduler.php</code></td><td><code>Scheduler $scheduler, DbManager $db</code></td><td>Register scheduled jobs</td></tr>
             </tbody>
@@ -257,6 +262,14 @@ Context::all();
                 <tr><td><code>Context</code></td><td><code>Fabriq\Kernel\Context</code></td><td>Coroutine-local state bag</td></tr>
                 <tr><td><code>Router</code></td><td><code>Fabriq\Http\Router</code></td><td>HTTP routing</td></tr>
                 <tr><td><code>DbManager</code></td><td><code>Fabriq\Storage\DbManager</code></td><td>Connection pool manager</td></tr>
+                <tr><td><code>DB</code></td><td><code>Fabriq\Orm\DB</code></td><td>Static database facade (query builder, raw, transactions)</td></tr>
+                <tr><td><code>Model</code></td><td><code>Fabriq\Orm\Model</code></td><td>Active Record base class with tenant scoping</td></tr>
+                <tr><td><code>QueryBuilder</code></td><td><code>Fabriq\Orm\QueryBuilder</code></td><td>Fluent, immutable SQL query builder</td></tr>
+                <tr><td><code>ProcedureCall</code></td><td><code>Fabriq\Orm\ProcedureCall</code></td><td>Stored procedure builder (IN/OUT params)</td></tr>
+                <tr><td><code>TenantDbRouter</code></td><td><code>Fabriq\Orm\TenantDbRouter</code></td><td>Per-tenant database connection routing</td></tr>
+                <tr><td><code>Schema</code></td><td><code>Fabriq\Orm\Schema\Schema</code></td><td>DDL operations (create/alter/drop tables)</td></tr>
+                <tr><td><code>MigrationRunner</code></td><td><code>Fabriq\Orm\Schema\MigrationRunner</code></td><td>Run and rollback database migrations</td></tr>
+                <tr><td><code>Collection</code></td><td><code>Fabriq\Orm\Collection</code></td><td>Typed array wrapper with functional helpers</td></tr>
                 <tr><td><code>TenantResolver</code></td><td><code>Fabriq\Tenancy\TenantResolver</code></td><td>Multi-tenant resolution</td></tr>
                 <tr><td><code>EventBus</code></td><td><code>Fabriq\Events\EventBus</code></td><td>Publish domain events</td></tr>
                 <tr><td><code>Dispatcher</code></td><td><code>Fabriq\Queue\Dispatcher</code></td><td>Dispatch background jobs</td></tr>

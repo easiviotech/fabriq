@@ -20,7 +20,7 @@
     <div id="docs-content-inner" class="docs-content">
 
         <h1>Game Server</h1>
-        <p>Fabriq includes a real-time game server engine that runs inside the same Swoole process as your HTTP and WebSocket handlers. It supports <strong>casual, .io-style, and competitive games</strong> &mdash; all without a separate game server.</p>
+        <p>Fabriq includes a real-time game server engine that runs inside the same Swoole process as your HTTP and WebSocket handlers. It supports <strong>casual, .io-style, MMORPG, MOBA, and competitive games</strong> &mdash; all without a separate game server.</p>
 
         <div class="tip">
             <strong>Cost Savings:</strong> A typical Node.js game server costs $20&ndash;$100/month per instance. By running the game loop inside Fabriq, you eliminate this cost entirely while gaining coroutine-safe database access, multi-tenancy, and built-in matchmaking.
@@ -34,7 +34,7 @@
                 <tr><th>Component</th><th>Responsibility</th></tr>
             </thead>
             <tbody>
-                <tr><td><code>GameLoop</code></td><td>Fixed tick-rate engine using <code>Swoole\Timer</code> (10&ndash;60 Hz)</td></tr>
+                <tr><td><code>GameLoop</code></td><td>Fixed tick-rate engine using <code>Swoole\Timer</code> (10&ndash;128 Hz)</td></tr>
                 <tr><td><code>GameRoom</code></td><td>Single room: state, players, tick handler, lifecycle</td></tr>
                 <tr><td><code>GameRoomManager</code></td><td>Create, find, join, destroy rooms; cross-worker via Redis</td></tr>
                 <tr><td><code>Matchmaker</code></td><td>Redis ZSET-based skill matchmaking with O(log N) ranking</td></tr>
@@ -56,8 +56,11 @@
             </thead>
             <tbody>
                 <tr><td><code>casual</code></td><td>10 Hz</td><td>100ms</td><td>Card games, trivia, turn-based</td></tr>
+                <tr><td><code>mmo</code></td><td>20 Hz</td><td>50ms</td><td>MMORPG, open-world, sandbox</td></tr>
                 <tr><td><code>realtime</code></td><td>30 Hz</td><td>~33ms</td><td>.io games, action RPGs</td></tr>
+                <tr><td><code>moba</code></td><td>45 Hz</td><td>~22ms</td><td>MOBA, RTS, team arena</td></tr>
                 <tr><td><code>competitive</code></td><td>60 Hz</td><td>~16ms</td><td>FPS, fighting games</td></tr>
+                <tr><td><code>twitch</code></td><td>128 Hz</td><td>~7.8ms</td><td>Competitive FPS, rhythm games, ultra-low-latency</td></tr>
             </tbody>
         </table>
 
@@ -82,8 +85,11 @@ return [
 
     'tick_rates' =&gt; [
         'casual' =&gt; 10,
+        'mmo' =&gt; 20,
         'realtime' =&gt; 30,
+        'moba' =&gt; 45,
         'competitive' =&gt; 60,
+        'twitch' =&gt; 128,
     ],
 
     'max_rooms_per_worker' =&gt; 100,
@@ -130,7 +136,9 @@ $message = $protocol-&gt;decode($rawData);
             </thead>
             <tbody>
                 <tr><td>Casual / Turn-Based</td><td>WebSocket (text)</td><td>JSON</td></tr>
+                <tr><td>MMO / Sandbox</td><td>WebSocket (binary)</td><td>MessagePack</td></tr>
                 <tr><td>.io / Realtime</td><td>WebSocket (binary)</td><td>MessagePack</td></tr>
+                <tr><td>MOBA / RTS</td><td>WebSocket (binary) + UDP</td><td>MessagePack</td></tr>
                 <tr><td>Competitive / FPS</td><td>UDP + WebSocket</td><td>MessagePack (state) + JSON (commands)</td></tr>
             </tbody>
         </table>

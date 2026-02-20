@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Database - Fabriq Documentation</title>
+    <title>Database &amp; ORM - Fabriq Documentation</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -19,8 +19,36 @@
 <div id="docs-content">
     <div id="docs-content-inner" class="docs-content">
 
-        <h1>Database</h1>
-        <p>Fabriq uses coroutine-safe connection pooling for MySQL and Redis, designed for Swoole's long-running, high-concurrency model.</p>
+        <h1>Database &amp; ORM</h1>
+        <p>Fabriq ships a custom ORM built for Swoole's coroutine model, with coroutine-safe connection pooling, Active Record models, a fluent query builder, stored procedure support, schema migrations, and per-tenant database routing.</p>
+
+        <!-- ── Default Credentials ────────────────────────────────── -->
+        <h2 id="credentials">Default Credentials (Docker)</h2>
+
+        <p>The Docker Compose stack creates a MySQL instance with these credentials:</p>
+
+        <table>
+            <thead>
+                <tr><th>Parameter</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Host (from containers / Adminer)</td><td><code>mysql</code></td></tr>
+                <tr><td>Host (from host machine)</td><td><code>localhost</code></td></tr>
+                <tr><td>Port</td><td><code>3306</code></td></tr>
+                <tr><td>Root password</td><td><code>rootpass</code></td></tr>
+                <tr><td>App username</td><td><code>fabriq</code></td></tr>
+                <tr><td>App password</td><td><code>sfpass</code></td></tr>
+                <tr><td>Platform database</td><td><code>sf_platform</code></td></tr>
+                <tr><td>Application database</td><td><code>sf_app</code></td></tr>
+            </tbody>
+        </table>
+
+        <p>These values are configured in <code>config/database.php</code> and must match <code>docker-compose.yml</code>.</p>
+
+        <div class="callout tip">
+            <div class="callout-title">Adminer Access</div>
+            <p>The Docker stack includes Adminer at <a href="http://localhost:8080">http://localhost:8080</a>. Use <code>mysql</code> as the server name (the Docker service name), not <code>localhost</code> or <code>db</code>.</p>
+        </div>
 
         <!-- ── Architecture ────────────────────────────────────────── -->
         <h2 id="architecture">Database Architecture</h2>
@@ -33,17 +61,48 @@
             </thead>
             <tbody>
                 <tr><td><code>sf_platform</code></td><td>Shared platform metadata</td><td><code>tenants</code>, <code>api_keys</code>, <code>roles</code>, <code>idempotency_keys</code></td></tr>
-                <tr><td><code>sf_app</code></td><td>Tenant application data</td><td><code>users</code>, <code>rooms</code>, <code>room_members</code>, <code>messages</code></td></tr>
+                <tr><td><code>sf_app</code></td><td>Tenant application data</td><td><code>users</code>, <code>rooms</code>, <code>room_members</code>, <code>messages</code>, <code>streams</code></td></tr>
             </tbody>
         </table>
 
         <p><strong>Redis</strong> is used for: queues, events, rate limiting, presence, pub/sub, and caching.</p>
 
-        <h3>Tenancy Strategy</h3>
+        <h3>Per-Tenant Database Routing</h3>
 
-        <p><strong>Default (v1):</strong> Shared app database with <code>tenant_id</code> enforcement. Every row includes <code>tenant_id</code>, and the repository layer requires <code>TenantContext</code> to be set. If <code>tenant_id</code> is null, a fail-fast <code>RuntimeException</code> is thrown.</p>
+        <p>The <code>TenantDbRouter</code> dynamically selects the correct database connection based on the tenant's configuration:</p>
 
-        <p><strong>Future (v2):</strong> Optional per-tenant DB or shard-per-group. <code>DbManager::app($dbKey)</code> will accept an optional key for routing, with LRU-managed pool maps for dedicated connections.</p>
+        <table>
+            <thead>
+                <tr><th>Strategy</th><th>How It Works</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>shared</code> (default)</td><td>All tenants share the <code>app</code> pool. Row-level isolation via <code>WHERE tenant_id = ?</code></td></tr>
+                <tr><td><code>same_server</code></td><td>Borrow from <code>app</code> pool, then <code>USE &lt;tenant_db&gt;</code>. Restore original DB on release</td></tr>
+                <tr><td><code>dedicated</code></td><td>Dynamically create/cache a <code>ConnectionPool</code> for the tenant's MySQL server. LRU eviction keeps memory bounded</td></tr>
+            </tbody>
+        </table>
+
+        <p>Tenant strategy is configured in the tenant's <code>config_json</code>:</p>
+
+        <pre><code class="language-json">// same_server strategy
+{
+  "database": {
+    "strategy": "same_server",
+    "name": "tenant_acme_db"
+  }
+}
+
+// dedicated strategy
+{
+  "database": {
+    "strategy": "dedicated",
+    "host": "10.0.1.50",
+    "port": 3306,
+    "name": "acme_production",
+    "username": "acme_user",
+    "password": "secret"
+  }
+}</code></pre>
 
         <!-- ── Connection Pools ────────────────────────────────────── -->
         <h2 id="connection-pools">Connection Pools</h2>
@@ -80,21 +139,282 @@ Worker 1: [Platform Pool (max 20)] [App Pool (max 20)] [Redis Pool (max 20)]</co
 
         <p>Total max connections = <code>workers &times; max_size &times; pool_count</code>.</p>
 
-        <h3>Health Check &amp; Reconnect</h3>
+        <!-- ── ORM Query Builder ─────────────────────────────────── -->
+        <h2 id="query-builder">ORM &mdash; Query Builder</h2>
 
-        <p>On every <code>borrow()</code>:</p>
+        <p>The <code>DB</code> facade provides a fluent, immutable query builder. Connections are borrowed and released entirely within terminal methods (<code>get</code>, <code>first</code>, <code>insert</code>, <code>update</code>, <code>delete</code>).</p>
 
-        <ol>
-            <li>Pop connection from channel</li>
-            <li>Execute <code>SELECT 1</code> (MySQL) or <code>PING</code> (Redis)</li>
-            <li>If healthy &rarr; return to caller</li>
-            <li>If unhealthy &rarr; discard, decrement pool size, create fresh connection</li>
-        </ol>
+        <pre><code class="language-php">use Fabriq\Orm\DB;
+
+// Select with fluent builder
+$users = DB::table('users')
+    ->select('id', 'name', 'email')
+    ->where('status', 'active')
+    ->where('age', '>=', 18)
+    ->orderBy('name')
+    ->limit(20)
+    ->get();
+
+// Insert
+$id = DB::table('orders')->insert([
+    'id'     => $orderId,
+    'total'  => 99.99,
+    'status' => 'pending',
+]);
+
+// Update
+$affected = DB::table('orders')
+    ->where('id', $orderId)
+    ->update(['status' => 'completed']);
+
+// Delete
+DB::table('orders')->where('id', $orderId)->delete();
+
+// Aggregates
+$count = DB::table('users')->where('status', 'active')->count();
+$total = DB::table('orders')->where('tenant_id', $tid)->sum('total');
+
+// Pagination
+$page = DB::table('users')
+    ->where('status', 'active')
+    ->paginate(perPage: 15, page: 2);
+// $page->items(), $page->total(), $page->currentPage(), $page->lastPage()
+
+// Raw queries
+$rows = DB::raw('SELECT * FROM users WHERE email = ?', [$email]);</code></pre>
+
+        <div class="callout info">
+            <div class="callout-title">Immutability</div>
+            <p>The <code>QueryBuilder</code> is immutable &mdash; each chained method returns a new instance, making it safe to share partial queries across coroutines.</p>
+        </div>
+
+        <!-- ── Active Record Models ──────────────────────────────── -->
+        <h2 id="models">ORM &mdash; Active Record Models</h2>
+
+        <p>Define models by extending the <code>Model</code> base class:</p>
+
+        <pre><code class="language-php">&lt;?php
+namespace App\Models;
+
+use Fabriq\Orm\Model;
+
+class Order extends Model
+{
+    protected string $table = 'orders';
+    protected string $primaryKey = 'id';
+    protected bool $tenantScoped = true;
+    protected bool $timestamps = true;
+
+    protected array $fillable = ['status', 'total', 'notes'];
+
+    protected array $casts = [
+        'total'    => 'float',
+        'metadata' => 'json',
+    ];
+
+    public function items(): \Fabriq\Orm\Relations\HasMany
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    public function customer(): \Fabriq\Orm\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+}</code></pre>
+
+        <h3>CRUD Operations</h3>
+
+        <pre><code class="language-php">use App\Models\Order;
+
+// Find
+$order = Order::find($id);
+$order = Order::findOrFail($id);
+
+// Query
+$orders = Order::where('status', 'pending')->get();
+$first  = Order::where('total', '>', 100)->first();
+
+// Create
+$order = Order::create(['status' => 'new', 'total' => 49.99]);
+
+// Update
+$order->status = 'shipped';
+$order->save();
+
+// Delete
+$order->delete();
+
+// All
+$orders = Order::all();</code></pre>
+
+        <h3>Tenant Scoping</h3>
+
+        <p>When <code>$tenantScoped = true</code>, the model automatically:</p>
+
+        <ul>
+            <li>Adds <code>WHERE tenant_id = ?</code> to all SELECT, UPDATE, DELETE queries</li>
+            <li>Injects <code>tenant_id</code> into INSERT data</li>
+            <li>Reads the tenant ID from <code>Context::tenantId()</code></li>
+        </ul>
+
+        <h3>Relationships</h3>
+
+        <table>
+            <thead>
+                <tr><th>Type</th><th>Method</th><th>Example</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Has One</td><td><code>hasOne()</code></td><td><code>$user->profile()</code></td></tr>
+                <tr><td>Has Many</td><td><code>hasMany()</code></td><td><code>$user->orders()</code></td></tr>
+                <tr><td>Belongs To</td><td><code>belongsTo()</code></td><td><code>$order->customer()</code></td></tr>
+                <tr><td>Belongs To Many</td><td><code>belongsToMany()</code></td><td><code>$user->roles()</code></td></tr>
+            </tbody>
+        </table>
+
+        <h3>Attribute Casting</h3>
+
+        <table>
+            <thead>
+                <tr><th>Cast</th><th>PHP Type</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>int</code> / <code>integer</code></td><td><code>int</code></td></tr>
+                <tr><td><code>float</code> / <code>double</code></td><td><code>float</code></td></tr>
+                <tr><td><code>bool</code> / <code>boolean</code></td><td><code>bool</code></td></tr>
+                <tr><td><code>string</code></td><td><code>string</code></td></tr>
+                <tr><td><code>array</code> / <code>json</code></td><td><code>array</code> (via JSON decode)</td></tr>
+                <tr><td><code>datetime</code></td><td><code>DateTimeImmutable</code></td></tr>
+            </tbody>
+        </table>
+
+        <h3>Collections</h3>
+
+        <p>Query results are returned as <code>Collection</code> objects with functional helpers:</p>
+
+        <pre><code class="language-php">$users = User::where('status', 'active')->get();
+
+$names   = $users->pluck('name');
+$grouped = $users->groupBy('department');
+$filtered = $users->filter(fn($u) => $u->age > 18);
+$mapped  = $users->map(fn($u) => $u->toArray());
+$count   = $users->count();
+$first   = $users->first();</code></pre>
+
+        <!-- ── Stored Procedures ─────────────────────────────────── -->
+        <h2 id="stored-procedures">ORM &mdash; Stored Procedures</h2>
+
+        <p>The <code>DB::call()</code> fluent builder handles IN/OUT parameters and tenant-aware routing:</p>
+
+        <pre><code class="language-php">use Fabriq\Orm\DB;
+
+$result = DB::call('sp_get_user_stats')
+    ->in('user_id', $userId)
+    ->out('total_orders')
+    ->out('total_spent')
+    ->exec();
+
+$totalOrders = $result->out('total_orders');
+$rows        = $result->rows();</code></pre>
+
+        <p>When the tenant has a <code>same_server</code> or <code>dedicated</code> database strategy, the <code>CALL</code> statement is automatically executed on the correct tenant database.</p>
+
+        <h3>Batch Parameters</h3>
+
+        <pre><code class="language-php">$result = DB::call('sp_process_batch')
+    ->withParams([
+        'start_date' => '2026-01-01',
+        'end_date'   => '2026-01-31',
+        'category'   => 'electronics',
+    ])
+    ->out('processed_count')
+    ->exec();</code></pre>
+
+        <!-- ── Schema & Migrations ───────────────────────────────── -->
+        <h2 id="schema">ORM &mdash; Schema &amp; Migrations</h2>
+
+        <h3>Schema Builder</h3>
+
+        <pre><code class="language-php">use Fabriq\Orm\Schema\Schema;
+use Fabriq\Orm\Schema\Blueprint;
+
+Schema::create('orders', function (Blueprint $table) {
+    $table->uuid('id')->primary();
+    $table->tenantId();
+    $table->string('status', 50)->default('pending');
+    $table->decimal('total', 10, 2);
+    $table->timestamps();
+
+    $table->index(['tenant_id', 'status']);
+});
+
+Schema::alter('orders', function (Blueprint $table) {
+    $table->string('tracking_number', 100)->nullable();
+});
+
+Schema::drop('temp_data');</code></pre>
+
+        <h3>Migrations</h3>
+
+        <p>Migration files follow the convention <code>NNN_description.php</code> in the <code>database/migrations/</code> directory:</p>
+
+        <pre><code class="language-php">&lt;?php
+use Fabriq\Orm\Schema\Migration;
+use Fabriq\Orm\Schema\Schema;
+use Fabriq\Orm\Schema\Blueprint;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::create('orders', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->tenantId();
+            $table->string('status', 50)->default('pending');
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::drop('orders');
+    }
+};</code></pre>
+
+        <p>Run migrations via <code>MigrationRunner</code>:</p>
+
+        <pre><code class="language-php">$runner = new MigrationRunner($router, 'database/migrations');
+$ran     = $runner->migrate();      // Run pending
+$rolled  = $runner->rollback(1);    // Roll back last
+$pending = $runner->pending();      // List pending</code></pre>
+
+        <!-- ── Transactions ────────────────────────────────────────── -->
+        <h2 id="transactions">Transactions</h2>
+
+        <h3>Using DB Facade</h3>
+
+        <pre><code class="language-php">DB::transaction('app', function ($conn) {
+    $conn->query('INSERT INTO messages ...');
+    $conn->query('UPDATE rooms SET last_message_at = ...');
+    return $messageId;
+});
+// Commits on success, rolls back on exception, always releases the connection.</code></pre>
+
+        <h3>Using DbManager Directly</h3>
+
+        <pre><code class="language-php">$result = $dbManager->transaction('app', function ($conn) use ($tenantId) {
+    $conn->prepare('INSERT INTO orders (id, tenant_id, total) VALUES (?, ?, ?)')
+         ->execute(['order-1', $tenantId, 99.99]);
+
+    $conn->prepare('INSERT INTO order_items (order_id, product_id, qty) VALUES (?, ?, ?)')
+         ->execute(['order-1', 'prod-1', 2]);
+
+    return ['order_id' => 'order-1'];
+});</code></pre>
 
         <!-- ── DbManager ──────────────────────────────────────────── -->
-        <h2 id="dbmanager">Using DbManager</h2>
+        <h2 id="dbmanager">Using DbManager (Low-Level)</h2>
 
-        <p>The <code>DbManager</code> is the primary interface for database access. Always follow the borrow &rarr; use &rarr; release pattern:</p>
+        <p>For cases where the ORM doesn't fit, you can use <code>DbManager</code> directly. Always follow the borrow &rarr; use &rarr; release pattern:</p>
 
         <pre><code class="language-php">use Fabriq\Storage\DbManager;
 
@@ -125,31 +445,10 @@ try {
     $dbManager->releaseRedis($redis);
 }</code></pre>
 
-        <div class="callout danger">
-            <div class="callout-title">Safety</div>
-            <p>Always <code>release()</code> connections in a <code>finally</code> block. Failing to do so will exhaust the connection pool.</p>
-        </div>
-
-        <!-- ── Transactions ────────────────────────────────────────── -->
-        <h2 id="transactions">Transactions</h2>
-
-        <p>The <code>transaction()</code> method handles begin/commit/rollback and automatic connection release:</p>
-
-        <pre><code class="language-php">$result = $dbManager->transaction('app', function ($conn) use ($tenantId) {
-    $conn->prepare('INSERT INTO orders (id, tenant_id, total) VALUES (?, ?, ?)')
-         ->execute(['order-1', $tenantId, 99.99]);
-
-    $conn->prepare('INSERT INTO order_items (order_id, product_id, qty) VALUES (?, ?, ?)')
-         ->execute(['order-1', 'prod-1', 2]);
-
-    return ['order_id' => 'order-1'];
-});
-// Commits on success, rolls back on exception, always releases the connection.</code></pre>
-
         <!-- ── TenantAwareRepository ───────────────────────────────── -->
-        <h2 id="repository">TenantAwareRepository</h2>
+        <h2 id="repository">TenantAwareRepository (Legacy)</h2>
 
-        <p>Extend <code>TenantAwareRepository</code> for automatic tenant enforcement in all queries:</p>
+        <p>For raw SQL with automatic tenant enforcement, extend <code>TenantAwareRepository</code>. Note: for most use cases, the ORM models with <code>$tenantScoped = true</code> are preferred.</p>
 
         <pre><code class="language-php">&lt;?php
 declare(strict_types=1);
@@ -169,22 +468,12 @@ final class OrderRepository extends TenantAwareRepository
     public function findByRoom(string $roomId): array
     {
         return $this->withAppDb(function ($conn) use ($roomId) {
-            $tenantId = $this->tenantId(); // Throws if no tenant set
+            $tenantId = $this->tenantId();
             return $this->execute(
                 $conn,
                 'SELECT * FROM orders WHERE tenant_id = ? AND room_id = ? ORDER BY created_at DESC',
                 [$tenantId, $roomId],
             );
-        });
-    }
-
-    public function create(array $data): void
-    {
-        $data['tenant_id'] = $this->tenantId();
-        $insert = $this->buildInsert('orders', $data);
-
-        $this->withAppDb(function ($conn) use ($insert) {
-            $this->execute($conn, $insert['sql'], $insert['params']);
         });
     }
 }</code></pre>
@@ -212,9 +501,29 @@ final class OrderRepository extends TenantAwareRepository
                 <tr><td>Always <code>release()</code> in a <code>finally</code> block</td><td>Prevents pool exhaustion</td></tr>
                 <tr><td>Never store a connection in a property</td><td>Connection belongs to the coroutine that borrowed it</td></tr>
                 <tr><td>Never share connections across coroutines</td><td>Swoole coroutine clients are not thread-safe</td></tr>
-                <tr><td>Use <code>TenantAwareRepository</code> for app tables</td><td>Prevents cross-tenant data leaks</td></tr>
+                <tr><td>Use ORM models with <code>$tenantScoped = true</code></td><td>Automatic tenant isolation at the query level</td></tr>
             </tbody>
         </table>
+
+        <!-- ── Configuration ─────────────────────────────────────── -->
+        <h2 id="configuration">ORM Configuration</h2>
+
+        <p>ORM settings live in <code>config/orm.php</code>:</p>
+
+        <pre><code class="language-php">return [
+    'timestamps'      => true,
+    'migration_path'  => 'database/migrations',
+    'migration_table' => 'migrations',
+    'tenant_routing'  => [
+        'default_strategy'    => 'shared',
+        'max_dedicated_pools' => 50,
+        'dedicated_pool'      => [
+            'max_size'       => 10,
+            'borrow_timeout' => 3.0,
+            'idle_timeout'   => 120.0,
+        ],
+    ],
+];</code></pre>
 
         <!-- Prev / Next -->
         <div id="docs-prev-next"></div>
@@ -231,4 +540,3 @@ final class OrderRepository extends TenantAwareRepository
 <script src="assets/docs.js"></script>
 </body>
 </html>
-

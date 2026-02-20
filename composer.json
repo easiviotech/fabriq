@@ -28,7 +28,8 @@
             "Fabriq\\Security\\": "packages/security/src/",
             "Fabriq\\Observability\\": "packages/observability/src/",
             "Fabriq\\Streaming\\": "packages/streaming/src/",
-            "Fabriq\\Gaming\\": "packages/gaming/src/"
+            "Fabriq\\Gaming\\": "packages/gaming/src/",
+            "Fabriq\\Orm\\": "packages/orm/src/"
         }
     },
     "autoload-dev": {
