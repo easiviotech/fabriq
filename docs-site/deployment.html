@@ -359,7 +359,7 @@ server {
 
         <table>
             <thead>
-                <tr><th>Platform</th><th>Web</th><th>Worker</th><th>Scheduler</th><th>Database</th><th>Redis</th></tr>
+                <tr><th>Platform</th><th>Web</th><th>Processor</th><th>Scheduler</th><th>Database</th><th>Redis</th></tr>
             </thead>
             <tbody>
                 <tr><td><strong>AWS</strong></td><td>ECS/Fargate + ALB</td><td>ECS Service</td><td>ECS (1 task)</td><td>RDS MySQL 8.0</td><td>ElastiCache Redis 7</td></tr>
@@ -583,7 +583,7 @@ kubectl run fabriq-migrate --rm -it --restart=Never \
         <ul>
             <li>Health check endpoint <code>/health</code> wired to load balancer</li>
             <li>Scheduler runs <strong>exactly 1 replica</strong> (never more)</li>
-            <li>Worker and scheduler have restart policies (<code>on-failure</code> or <code>unless-stopped</code>)</li>
+            <li>Processor and scheduler have restart policies (<code>on-failure</code> or <code>unless-stopped</code>)</li>
             <li>Container images are tagged with specific versions (not <code>latest</code>)</li>
         </ul>
 

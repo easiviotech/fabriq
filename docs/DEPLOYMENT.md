@@ -390,7 +390,7 @@ Caddy automatically provisions and renews Let's Encrypt TLS certificates.
 
 The same Docker image runs on any cloud platform:
 
-| Platform | Web | Worker | Scheduler | Database | Redis |
+| Platform | Web | Processor | Scheduler | Database | Redis |
 |----------|-----|--------|-----------|----------|-------|
 | **AWS** | ECS/Fargate + ALB | ECS Service (auto-scale) | ECS (1 task) | RDS MySQL 8.0 | ElastiCache Redis 7 |
 | **GCP** | Cloud Run / GKE | GKE Deployment | GKE (1 replica) | Cloud SQL MySQL | Memorystore Redis |
@@ -582,7 +582,7 @@ Redis default `maxclients` is 10,000 — usually sufficient. For ElastiCache, th
 
 - [ ] Health check endpoint `/health` wired to load balancer
 - [ ] Scheduler runs **exactly 1 replica** (never more)
-- [ ] Worker and scheduler have restart policies (`on-failure` or `unless-stopped`)
+- [ ] Processor and scheduler have restart policies (`on-failure` or `unless-stopped`)
 - [ ] Container images are tagged with specific versions (not `latest`)
 
 ### Observability
