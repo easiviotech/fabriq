@@ -26,6 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install splitsh-lite
         run: |
@@ -35,21 +36,21 @@ jobs:
 
       - name: Split ${{ matrix.package.local }}
         env:
-          GITHUB_TOKEN: ${{ secrets.SPLIT_TOKEN }}
+          SPLIT_TOKEN: ${{ secrets.SPLIT_TOKEN }}
         run: |
           SHA=$(splitsh-lite --prefix=packages/${{ matrix.package.local }})
           git remote add ${{ matrix.package.remote }} \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/easiviotech/${{ matrix.package.remote }}.git" 2>/dev/null || true
+            "https://x-access-token:${SPLIT_TOKEN}@github.com/easiviotech/${{ matrix.package.remote }}.git" 2>/dev/null || true
           git push ${{ matrix.package.remote }} ${SHA}:refs/heads/main -f
 
       - name: Tag split repo (on version tag only)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          GITHUB_TOKEN: ${{ secrets.SPLIT_TOKEN }}
+          SPLIT_TOKEN: ${{ secrets.SPLIT_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           SHA=$(splitsh-lite --prefix=packages/${{ matrix.package.local }})
           git remote add ${{ matrix.package.remote }} \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/easiviotech/${{ matrix.package.remote }}.git" 2>/dev/null || true
+            "https://x-access-token:${SPLIT_TOKEN}@github.com/easiviotech/${{ matrix.package.remote }}.git" 2>/dev/null || true
           git tag -f ${TAG} ${SHA}
           git push ${{ matrix.package.remote }} ${TAG} -f
