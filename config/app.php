@@ -32,9 +32,11 @@ return [
         \App\Providers\RouteServiceProvider::class,
         \App\Providers\EventServiceProvider::class,
         \App\Providers\RealtimeServiceProvider::class,
-        \App\Providers\StreamingServiceProvider::class,
-        \App\Providers\GamingServiceProvider::class,
         \App\Providers\OrmServiceProvider::class,
+
+        // Optional — uncomment to enable (also set 'enabled' => true in config)
+        // \App\Providers\StreamingServiceProvider::class,
+        // \App\Providers\GamingServiceProvider::class,
     ],
 ];
 

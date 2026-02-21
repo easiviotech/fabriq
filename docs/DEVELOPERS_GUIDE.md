@@ -1885,9 +1885,11 @@ Context::all();
 
 ---
 
-## 19. Live Streaming
+## 19. Live Streaming *(opt-in)*
 
 Fabriq includes a built-in live streaming engine that runs inside the same Swoole process. It supports **WebRTC signaling**, **RTMP-to-HLS transcoding** via FFmpeg, **viewer tracking**, and **chat moderation** — all multi-tenant and coroutine-safe.
+
+> **Disabled by default.** To enable: set `STREAMING_ENABLED=1` (or `'enabled' => true` in `config/streaming.php`) and uncomment `StreamingServiceProvider` in `config/app.php`.
 
 ### Architecture
 
@@ -2019,9 +2021,11 @@ Register in `config/app.php`:
 
 ---
 
-## 20. Game Server
+## 20. Game Server *(opt-in)*
 
 Fabriq includes a real-time game server engine that runs inside the same Swoole process. It supports **casual, .io-style, and competitive games** with configurable tick rates, matchmaking, lobbies, and state synchronization.
+
+> **Disabled by default.** To enable: set `GAMING_ENABLED=1` (or `'enabled' => true` in `config/gaming.php`), uncomment `GamingServiceProvider` in `config/app.php`, and install `composer require rybakit/msgpack`.
 
 ### Architecture
 

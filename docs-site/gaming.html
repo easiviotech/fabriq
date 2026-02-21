@@ -27,6 +27,10 @@
         </div>
 
         <div class="tip">
+            <strong>Opt-in:</strong> Gaming is disabled by default. To enable it: <strong>1)</strong> set <code>GAMING_ENABLED=1</code> environment variable (or <code>'enabled' =&gt; true</code> in <code>config/gaming.php</code>), <strong>2)</strong> uncomment <code>GamingServiceProvider</code> in <code>config/app.php</code>, and <strong>3)</strong> install <code>composer require rybakit/msgpack</code>.
+        </div>
+
+        <div class="tip">
             <strong>Cost Savings:</strong> A typical Node.js game server costs $20&ndash;$100/month per instance. By running the game loop inside Fabriq, you eliminate this cost entirely while gaining coroutine-safe database access, multi-tenancy, and built-in matchmaking.
         </div>
 

@@ -214,14 +214,20 @@ curl http://localhost:8000/health
 
 ## Key Features
 
-### Live Streaming
+### Live Streaming *(opt-in — disabled by default)*
+
+Enable by setting `STREAMING_ENABLED=1` (or `'enabled' => true` in `config/streaming.php`) and uncommenting `StreamingServiceProvider` in `config/app.php`.
+
 - **WebRTC signaling** — SDP offer/answer and ICE candidate exchange over WebSocket
 - **FFmpeg transcoding** — RTMP → HLS with configurable segment duration and playlist size
 - **Viewer tracking** — Redis-backed concurrent viewer counting with heartbeats
 - **Chat moderation** — Slow mode, word filters, per-stream ban lists
 - **CDN-ready** — HLS segments served with appropriate `Cache-Control` headers
 
-### Game Server
+### Game Server *(opt-in — disabled by default)*
+
+Enable by setting `GAMING_ENABLED=1` (or `'enabled' => true` in `config/gaming.php`), uncommenting `GamingServiceProvider` in `config/app.php`, and installing `composer require rybakit/msgpack`.
+
 - **Fixed tick-rate game loop** — 10 Hz (casual), 30 Hz (realtime), 60 Hz (competitive) via `Swoole\Timer`
 - **UDP protocol** — Low-latency binary communication using MessagePack
 - **Matchmaking** — Redis ZSET-based skill ranking with expanding search range

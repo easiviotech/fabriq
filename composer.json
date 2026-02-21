@@ -9,8 +9,10 @@
         "php": ">=8.2",
         "ext-swoole": "*",
         "ext-json": "*",
-        "ext-mbstring": "*",
-        "rybakit/msgpack": "^0.9"
+        "ext-mbstring": "*"
+    },
+    "suggest": {
+        "rybakit/msgpack": "Required when gaming package is enabled (MessagePack UDP protocol)"
     },
     "replace": {
         "fabriq/kernel": "self.version",

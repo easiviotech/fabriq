@@ -273,17 +273,19 @@ final class Application
         $metrics->registerGauge('db_pool_in_use', 'DB pool connections in use');
         $metrics->registerCounter('db_pool_waits', 'DB pool borrow wait count');
 
-        // Streaming metrics
-        $metrics->registerGauge('streams_active', 'Currently live streams');
-        $metrics->registerGauge('stream_viewers_current', 'Total concurrent viewers');
-        $metrics->registerGauge('stream_transcodes_active', 'Active FFmpeg processes');
+        if ($this->config->get('streaming.enabled', false)) {
+            $metrics->registerGauge('streams_active', 'Currently live streams');
+            $metrics->registerGauge('stream_viewers_current', 'Total concurrent viewers');
+            $metrics->registerGauge('stream_transcodes_active', 'Active FFmpeg processes');
+        }
 
-        // Gaming metrics
-        $metrics->registerGauge('game_rooms_active', 'Active game rooms');
-        $metrics->registerGauge('game_players_connected', 'Connected game players');
-        $metrics->registerHistogram('game_tick_latency_ms', 'Game loop tick timing');
-        $metrics->registerCounter('udp_packets_total', 'UDP packets processed');
-        $metrics->registerGauge('matchmaking_queue_size', 'Players waiting for match');
+        if ($this->config->get('gaming.enabled', false)) {
+            $metrics->registerGauge('game_rooms_active', 'Active game rooms');
+            $metrics->registerGauge('game_players_connected', 'Connected game players');
+            $metrics->registerHistogram('game_tick_latency_ms', 'Game loop tick timing');
+            $metrics->registerCounter('udp_packets_total', 'UDP packets processed');
+            $metrics->registerGauge('matchmaking_queue_size', 'Players waiting for match');
+        }
     }
 
     private function registerDefaultRoutes(MetricsCollector $metrics): void

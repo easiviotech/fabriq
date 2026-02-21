@@ -192,6 +192,8 @@ return [
 | `SWOOLE_WORKERS` | No | CPU count | Number of Swoole worker processes |
 | `SWOOLE_TASK_WORKERS` | No | `2` | Number of task worker processes |
 | `SWOOLE_LOG_LEVEL` | No | `4` | Swoole log level (4 = WARNING) |
+| `STREAMING_ENABLED` | No | `false` | Enable live streaming subsystem |
+| `GAMING_ENABLED` | No | `false` | Enable game server subsystem |
 
 ---
 
