@@ -39,7 +39,7 @@ jobs:
         run: |
           SHA=$(splitsh-lite --prefix=packages/${{ matrix.package.local }})
           git remote add ${{ matrix.package.remote }} \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/nikcoder2018/${{ matrix.package.remote }}.git" 2>/dev/null || true
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/easiviotech/${{ matrix.package.remote }}.git" 2>/dev/null || true
           git push ${{ matrix.package.remote }} ${SHA}:refs/heads/main -f
 
       - name: Tag split repo (on version tag only)
@@ -50,6 +50,6 @@ jobs:
         run: |
           SHA=$(splitsh-lite --prefix=packages/${{ matrix.package.local }})
           git remote add ${{ matrix.package.remote }} \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/nikcoder2018/${{ matrix.package.remote }}.git" 2>/dev/null || true
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/easiviotech/${{ matrix.package.remote }}.git" 2>/dev/null || true
           git tag -f ${TAG} ${SHA}
           git push ${{ matrix.package.remote }} ${TAG} -f
