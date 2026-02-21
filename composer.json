@@ -12,6 +12,14 @@
         "ext-mbstring": "*",
         "rybakit/msgpack": "^0.9"
     },
+    "replace": {
+        "fabriq/kernel": "self.version",
+        "fabriq/storage": "self.version",
+        "fabriq/observability": "self.version",
+        "fabriq/tenancy": "self.version",
+        "fabriq/streaming": "self.version",
+        "fabriq/gaming": "self.version"
+    },
     "require-dev": {
         "phpunit/phpunit": "^10.5"
     },

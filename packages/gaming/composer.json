@@ -1,0 +1,29 @@
+{
+    "name": "fabriq/gaming",
+    "description": "Fabriq Gaming — Real-time game rooms, matchmaking, lobbies, state synchronisation, and UDP protocol with MessagePack.",
+    "type": "library",
+    "license": "proprietary",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": ">=8.2",
+        "ext-swoole": "*",
+        "fabriq/kernel": "^1.0",
+        "fabriq/observability": "^1.0",
+        "fabriq/storage": "^1.0",
+        "rybakit/msgpack": "^0.9"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fabriq\\Gaming\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.x-dev"
+        }
+    }
+}

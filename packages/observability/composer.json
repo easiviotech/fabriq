@@ -1,0 +1,25 @@
+{
+    "name": "fabriq/observability",
+    "description": "Fabriq Observability — Structured logging, distributed tracing, and metrics collection.",
+    "type": "library",
+    "license": "proprietary",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": ">=8.2",
+        "fabriq/kernel": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fabriq\\Observability\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.x-dev"
+        }
+    }
+}

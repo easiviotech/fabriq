@@ -1,0 +1,30 @@
+{
+    "name": "fabriq/kernel",
+    "description": "Fabriq Kernel — Core container, config, context, server, and service-provider abstractions powered by Swoole.",
+    "type": "library",
+    "license": "proprietary",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": ">=8.2",
+        "ext-swoole": "*"
+    },
+    "suggest": {
+        "fabriq/storage": "Required by Application for database management",
+        "fabriq/observability": "Required by Application for logging and metrics",
+        "fabriq/tenancy": "Required by Context for multi-tenant support"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fabriq\\Kernel\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.x-dev"
+        }
+    }
+}
