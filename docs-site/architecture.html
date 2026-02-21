@@ -61,11 +61,11 @@
 │                  TenantDbRouter              ├──→ EventBus  │
 │                  ProcedureCall               ├──→ PushSvc   │
 │                                              │              │
-│   Streaming ────→ SignalingHandler            │              │
-│                  TranscodingPipeline (FFmpeg) │              │
+│   Streaming* ───→ SignalingHandler            │              │
+│     (add-on)     TranscodingPipeline (FFmpeg) │              │
 │                  HlsManager                  │              │
 │                                              │              │
-│   Gaming ───────→ GameLoop (tick)            │              │
+│   Gaming* ──────→ GameLoop (tick)            │              │
 │                  GameRoomManager             │              │
 │                  Matchmaker (Redis ZSET)     │              │
 └──────────────────────────────────────────────────────────────┘
@@ -233,19 +233,38 @@ Context::all();
         <!-- ── Package Distribution ─────────────────────────────────── -->
         <h2 id="packages">Package Distribution (Packagist)</h2>
 
-        <p>Fabriq uses a <strong>monorepo split</strong> approach (the same pattern used by Laravel and Symfony). Code lives in <code>packages/</code> within the monorepo, and a GitHub Actions workflow automatically splits each package into its own read-only repository on every push to <code>main</code>. These split repositories are registered on <a href="https://packagist.org" target="_blank">Packagist</a>:</p>
+        <p>Fabriq uses a <strong>monorepo split</strong> approach (the same pattern used by Laravel and Symfony). Code lives in <code>packages/</code> within the monorepo, and a GitHub Actions workflow automatically splits each package into its own read-only repository on every push to <code>main</code>. These split repositories are registered on <a href="https://packagist.org" target="_blank">Packagist</a>.</p>
 
-        <pre><code class="language-bash">composer require fabriq/streaming
+        <h3>Core Packages</h3>
+        <p>These packages are always present in the monorepo and form the foundation of every Fabriq application:</p>
+        <pre><code class="language-bash">composer require fabriq/kernel
+composer require fabriq/storage
+composer require fabriq/observability
+composer require fabriq/tenancy</code></pre>
+
+        <h3>Add-on Packages</h3>
+        <p><strong>Streaming</strong> and <strong>Gaming</strong> are optional add-on packages. They are disabled by default and must be explicitly installed and enabled:</p>
+        <pre><code class="language-bash"># Only install if your application needs live streaming
+composer require fabriq/streaming
+
+# Only install if your application needs a game server
 composer require fabriq/gaming</code></pre>
+        <p>After installing, enable each add-on via environment variables (<code>STREAMING_ENABLED=1</code>, <code>GAMING_ENABLED=1</code>) and uncomment the corresponding service provider in <code>config/app.php</code>.</p>
 
         <h3>Dependency Graph</h3>
 
-        <pre><code>fabriq/streaming ──→ fabriq/kernel, fabriq/storage, fabriq/observability
-fabriq/gaming    ──→ fabriq/kernel, fabriq/storage, fabriq/observability, rybakit/msgpack
-fabriq/storage   ──→ fabriq/kernel
-fabriq/observability ──→ fabriq/kernel
-fabriq/tenancy   ──→ fabriq/kernel
-fabriq/kernel    ──→ (suggests: fabriq/storage, fabriq/observability, fabriq/tenancy)</code></pre>
+        <pre><code>                 ┌─── Core ───────────────────────────────────┐
+                 │ fabriq/kernel (foundation)                  │
+                 │ fabriq/storage   ──→ fabriq/kernel          │
+                 │ fabriq/observability ──→ fabriq/kernel      │
+                 │ fabriq/tenancy   ──→ fabriq/kernel          │
+                 └────────────────────────────────────────────┘
+
+                 ┌─── Add-ons (optional) ────────────────────┐
+                 │ fabriq/streaming ──→ kernel, storage, obs  │
+                 │ fabriq/gaming    ──→ kernel, storage, obs  │
+                 │                  ──→ rybakit/msgpack        │
+                 └────────────────────────────────────────────┘</code></pre>
 
         <p>When developing in the monorepo, the root <code>composer.json</code> has a <code>replace</code> section so Composer knows all sub-packages are already present.</p>
 
@@ -295,11 +314,13 @@ fabriq/kernel    ──→ (suggests: fabriq/storage, fabriq/observability, fabr
                 <tr><td><code>Gateway</code></td><td><code>Fabriq\Realtime\Gateway</code></td><td>WS connection management</td></tr>
                 <tr><td><code>PushService</code></td><td><code>Fabriq\Realtime\PushService</code></td><td>Push to WS clients</td></tr>
                 <tr><td><code>Logger</code></td><td><code>Fabriq\Observability\Logger</code></td><td>Structured JSON logging</td></tr>
+                <tr><td colspan="3" style="background:#f0f4f8;font-weight:bold;padding-top:10px;">Add-on: <code>fabriq/streaming</code></td></tr>
                 <tr><td><code>SignalingHandler</code></td><td><code>Fabriq\Streaming\SignalingHandler</code></td><td>WebRTC SDP/ICE exchange over WebSocket</td></tr>
                 <tr><td><code>StreamManager</code></td><td><code>Fabriq\Streaming\StreamManager</code></td><td>Live stream lifecycle management</td></tr>
                 <tr><td><code>TranscodingPipeline</code></td><td><code>Fabriq\Streaming\TranscodingPipeline</code></td><td>FFmpeg RTMP &rarr; HLS transcoding</td></tr>
                 <tr><td><code>ViewerTracker</code></td><td><code>Fabriq\Streaming\ViewerTracker</code></td><td>Redis-backed concurrent viewer counting</td></tr>
                 <tr><td><code>ChatModerator</code></td><td><code>Fabriq\Streaming\ChatModerator</code></td><td>Chat slow mode, word filters, bans</td></tr>
+                <tr><td colspan="3" style="background:#f0f4f8;font-weight:bold;padding-top:10px;">Add-on: <code>fabriq/gaming</code></td></tr>
                 <tr><td><code>GameLoop</code></td><td><code>Fabriq\Gaming\GameLoop</code></td><td>Fixed tick-rate game engine</td></tr>
                 <tr><td><code>GameRoom</code></td><td><code>Fabriq\Gaming\GameRoom</code></td><td>Single room: state, players, lifecycle</td></tr>
                 <tr><td><code>GameRoomManager</code></td><td><code>Fabriq\Gaming\GameRoomManager</code></td><td>Room CRUD, cross-worker coordination</td></tr>

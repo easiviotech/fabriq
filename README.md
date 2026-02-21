@@ -1,6 +1,6 @@
 # Fabriq
 
-> **Unified Swoole-powered backend platform** — HTTP APIs, WebSocket realtime, background jobs, event bus, live streaming, and game server with first-class multi-tenancy.
+> **Unified Swoole-powered backend platform** — HTTP APIs, WebSocket realtime, background jobs, event bus, and first-class multi-tenancy. Optional add-on packages for live streaming and game server.
 
 **Brand:** Fabrq • **Runtime:** PHP 8.2+ / Swoole • **License:** Proprietary
 
@@ -8,18 +8,22 @@
 
 ## Architecture
 
-Fabriq is a **long-running Swoole server** that hosts HTTP, WebSocket, UDP, queue processors, event consumers, live streaming, and a game server engine in a single process. Every execution path enforces `TenantContext` — tenant isolation is guaranteed at the kernel level.
+Fabriq is a **long-running Swoole server** that hosts HTTP, WebSocket, queue processors, and event consumers in a single process. Every execution path enforces `TenantContext` — tenant isolation is guaranteed at the kernel level.
+
+Optional add-on packages extend the platform with **live streaming** (`fabriq/streaming`) and a **real-time game server** (`fabriq/gaming`) — install only what you need.
 
 ```
 Client → HTTP/WS/UDP → Middleware Chain → Route Handler → DB/Redis (tenant-scoped)
                                         → Push to WS rooms (Redis Pub/Sub)
                                         → Dispatch job (Redis Streams)
                                         → Emit event (Redis Streams)
-                                        → WebRTC signaling / HLS serving (Streaming)
-                                        → Game room tick / state sync (Gaming)
+                                        → WebRTC signaling / HLS serving (fabriq/streaming)
+                                        → Game room tick / state sync (fabriq/gaming)
 ```
 
-### Packages
+### Core Packages
+
+These packages are always active and form the foundation of every Fabriq application:
 
 | Package | Path | Description |
 |---------|------|-------------|
@@ -32,8 +36,18 @@ Client → HTTP/WS/UDP → Middleware Chain → Route Handler → DB/Redis (tena
 | **Events** | `packages/events/` | EventBus, EventConsumer (dedupe), EventSchema |
 | **Security** | `packages/security/` | JwtAuthenticator, ApiKeyAuthenticator, PolicyEngine (RBAC+ABAC), RateLimiter |
 | **Observability** | `packages/observability/` | Logger (structured JSON), MetricsCollector (Prometheus), TraceContext |
-| **Streaming** | `packages/streaming/` | SignalingHandler (WebRTC), StreamManager, TranscodingPipeline (FFmpeg/HLS), ViewerTracker, ChatModerator |
-| **Gaming** | `packages/gaming/` | GameLoop, GameRoom, GameRoomManager, Matchmaker (Redis ZSET), LobbyManager, UdpProtocol (MessagePack), StateSync, PlayerSession |
+| **ORM** | `packages/orm/` | Active Record models, fluent QueryBuilder, stored procedures, schema migrations, tenant DB routing |
+
+### Optional Add-on Packages
+
+These packages are **disabled by default** and installed separately. Enable them only if your application needs streaming or gaming capabilities:
+
+| Package | Install | Description |
+|---------|---------|-------------|
+| **Streaming** | `composer require fabriq/streaming` | WebRTC signaling, FFmpeg transcoding (RTMP→HLS), viewer tracking, chat moderation |
+| **Gaming** | `composer require fabriq/gaming` | Game loop, matchmaking, lobbies, UDP protocol (MessagePack), delta state sync |
+
+> See [Enabling Add-on Packages](#enabling-add-on-packages) for setup instructions.
 
 ### Application Structure
 
@@ -214,9 +228,9 @@ curl http://localhost:8000/health
 
 ## Key Features
 
-### Live Streaming *(opt-in — disabled by default)*
+### `fabriq/streaming` — Live Streaming *(add-on package)*
 
-Enable by setting `STREAMING_ENABLED=1` (or `'enabled' => true` in `config/streaming.php`) and uncommenting `StreamingServiceProvider` in `config/app.php`.
+> Install: `composer require fabriq/streaming` — [View on Packagist](https://packagist.org/packages/fabriq/streaming)
 
 - **WebRTC signaling** — SDP offer/answer and ICE candidate exchange over WebSocket
 - **FFmpeg transcoding** — RTMP → HLS with configurable segment duration and playlist size
@@ -224,9 +238,9 @@ Enable by setting `STREAMING_ENABLED=1` (or `'enabled' => true` in `config/strea
 - **Chat moderation** — Slow mode, word filters, per-stream ban lists
 - **CDN-ready** — HLS segments served with appropriate `Cache-Control` headers
 
-### Game Server *(opt-in — disabled by default)*
+### `fabriq/gaming` — Game Server *(add-on package)*
 
-Enable by setting `GAMING_ENABLED=1` (or `'enabled' => true` in `config/gaming.php`), uncommenting `GamingServiceProvider` in `config/app.php`, and installing `composer require rybakit/msgpack`.
+> Install: `composer require fabriq/gaming` — [View on Packagist](https://packagist.org/packages/fabriq/gaming)
 
 - **Fixed tick-rate game loop** — 10 Hz (casual), 30 Hz (realtime), 60 Hz (competitive) via `Swoole\Timer`
 - **UDP protocol** — Low-latency binary communication using MessagePack
@@ -239,7 +253,9 @@ Enable by setting `GAMING_ENABLED=1` (or `'enabled' => true` in `config/gaming.p
 
 ## Prometheus Metrics
 
-Exposed at `GET /metrics`. Key built-in metrics include:
+Exposed at `GET /metrics`. Core metrics are always available; add-on metrics appear when the package is enabled.
+
+**Core metrics:**
 
 | Metric | Type | Description |
 |--------|------|-------------|
@@ -247,9 +263,19 @@ Exposed at `GET /metrics`. Key built-in metrics include:
 | `http_latency_ms` | histogram | Request latency |
 | `ws_connections` | gauge | Active WebSocket connections |
 | `queue_processed_total` | counter | Jobs processed |
+
+**Streaming metrics** *(when `fabriq/streaming` is enabled):*
+
+| Metric | Type | Description |
+|--------|------|-------------|
 | `streams_active` | gauge | Currently live streams |
 | `stream_viewers_current` | gauge | Total concurrent viewers |
 | `stream_transcodes_active` | gauge | Active FFmpeg processes |
+
+**Gaming metrics** *(when `fabriq/gaming` is enabled):*
+
+| Metric | Type | Description |
+|--------|------|-------------|
 | `game_rooms_active` | gauge | Active game rooms |
 | `game_players_connected` | gauge | Connected game players |
 | `game_tick_latency_ms` | histogram | Game loop tick timing |
@@ -312,16 +338,9 @@ The `docs-site/` directory contains a full HTML documentation site with syntax-h
 
 ## Packagist Packages
 
-Fabriq's core packages are published individually on [Packagist](https://packagist.org), so you can install only what you need:
+Fabriq's packages are published individually on [Packagist](https://packagist.org). The **core packages** power every Fabriq application. The **add-on packages** are optional and installed only when needed.
 
-```bash
-composer require fabriq/kernel
-composer require fabriq/storage
-composer require fabriq/observability
-composer require fabriq/tenancy
-composer require fabriq/streaming
-composer require fabriq/gaming
-```
+### Core Packages
 
 | Package | Packagist | Description |
 |---------|-----------|-------------|
@@ -329,8 +348,35 @@ composer require fabriq/gaming
 | [`fabriq/storage`](https://packagist.org/packages/fabriq/storage) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/storage)](https://packagist.org/packages/fabriq/storage) | Connection pools, DbManager, tenant-aware repositories |
 | [`fabriq/observability`](https://packagist.org/packages/fabriq/observability) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/observability)](https://packagist.org/packages/fabriq/observability) | Structured logging, metrics, tracing |
 | [`fabriq/tenancy`](https://packagist.org/packages/fabriq/tenancy) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/tenancy)](https://packagist.org/packages/fabriq/tenancy) | Multi-tenant context, resolution, config caching |
+
+### Add-on Packages
+
+| Package | Packagist | Description |
+|---------|-----------|-------------|
 | [`fabriq/streaming`](https://packagist.org/packages/fabriq/streaming) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/streaming)](https://packagist.org/packages/fabriq/streaming) | WebRTC signaling, HLS transcoding, viewer tracking, chat |
 | [`fabriq/gaming`](https://packagist.org/packages/fabriq/gaming) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/gaming)](https://packagist.org/packages/fabriq/gaming) | Game loop, matchmaking, lobbies, UDP protocol, state sync |
+
+### Enabling Add-on Packages
+
+**`fabriq/streaming`:**
+
+```bash
+composer require fabriq/streaming
+```
+
+Then in your project:
+1. Set `STREAMING_ENABLED=1` environment variable (or `'enabled' => true` in `config/streaming.php`)
+2. Uncomment `\App\Providers\StreamingServiceProvider::class` in `config/app.php`
+
+**`fabriq/gaming`:**
+
+```bash
+composer require fabriq/gaming
+```
+
+Then in your project:
+1. Set `GAMING_ENABLED=1` environment variable (or `'enabled' => true` in `config/gaming.php`)
+2. Uncomment `\App\Providers\GamingServiceProvider::class` in `config/app.php`
 
 ### Dependency Graph
 

@@ -188,22 +188,11 @@ sudo mv composer.phar /usr/local/bin/composer
 cd myapp
 composer install</code></pre>
 
-        <h3 id="individual-packages">Using Individual Packages (Packagist)</h3>
+        <h3 id="individual-packages">Packagist Packages</h3>
 
-        <p>Fabriq's core packages are published on <a href="https://packagist.org" target="_blank">Packagist</a>. Install only what you need:</p>
+        <p>Fabriq's packages are published on <a href="https://packagist.org" target="_blank">Packagist</a>. <strong>Core packages</strong> power every Fabriq application. <strong>Add-on packages</strong> are optional and installed only when needed.</p>
 
-        <pre><code class="language-bash"># Install the streaming package (pulls in kernel, storage, observability)
-composer require fabriq/streaming
-
-# Install the gaming package
-composer require fabriq/gaming
-
-# Or pick specific packages
-composer require fabriq/kernel
-composer require fabriq/storage
-composer require fabriq/observability
-composer require fabriq/tenancy</code></pre>
-
+        <h4>Core Packages</h4>
         <table>
             <thead>
                 <tr><th>Package</th><th>Description</th></tr>
@@ -213,10 +202,20 @@ composer require fabriq/tenancy</code></pre>
                 <tr><td><code><a href="https://packagist.org/packages/fabriq/storage">fabriq/storage</a></code></td><td>Connection pools, DbManager, tenant-aware repositories</td></tr>
                 <tr><td><code><a href="https://packagist.org/packages/fabriq/observability">fabriq/observability</a></code></td><td>Structured logging, metrics, distributed tracing</td></tr>
                 <tr><td><code><a href="https://packagist.org/packages/fabriq/tenancy">fabriq/tenancy</a></code></td><td>Multi-tenant resolution, context, config caching</td></tr>
-                <tr><td><code><a href="https://packagist.org/packages/fabriq/streaming">fabriq/streaming</a></code></td><td>WebRTC signaling, HLS transcoding, viewer tracking, chat</td></tr>
-                <tr><td><code><a href="https://packagist.org/packages/fabriq/gaming">fabriq/gaming</a></code></td><td>Game loop, matchmaking, lobbies, UDP protocol, state sync</td></tr>
             </tbody>
         </table>
+
+        <h4>Add-on Packages <span style="font-size:0.8em;color:#888;">(disabled by default)</span></h4>
+        <table>
+            <thead>
+                <tr><th>Package</th><th>Install</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code><a href="https://packagist.org/packages/fabriq/streaming">fabriq/streaming</a></code></td><td><code>composer require fabriq/streaming</code></td><td>WebRTC signaling, HLS transcoding, viewer tracking, chat</td></tr>
+                <tr><td><code><a href="https://packagist.org/packages/fabriq/gaming">fabriq/gaming</a></code></td><td><code>composer require fabriq/gaming</code></td><td>Game loop, matchmaking, lobbies, UDP protocol, state sync</td></tr>
+            </tbody>
+        </table>
+        <p>After installing an add-on package, enable it by setting the environment variable (<code>STREAMING_ENABLED=1</code> or <code>GAMING_ENABLED=1</code>) and uncommenting its service provider in <code>config/app.php</code>. See the <a href="streaming.html">Streaming</a> and <a href="gaming.html">Gaming</a> pages for details.</p>
 
         <!-- ── Quick Start ─────────────────────────────────────────── -->
         <h2 id="quick-start">Quick Start</h2>

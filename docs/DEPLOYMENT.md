@@ -192,8 +192,8 @@ return [
 | `SWOOLE_WORKERS` | No | CPU count | Number of Swoole worker processes |
 | `SWOOLE_TASK_WORKERS` | No | `2` | Number of task worker processes |
 | `SWOOLE_LOG_LEVEL` | No | `4` | Swoole log level (4 = WARNING) |
-| `STREAMING_ENABLED` | No | `false` | Enable live streaming subsystem |
-| `GAMING_ENABLED` | No | `false` | Enable game server subsystem |
+| `STREAMING_ENABLED` | No | `false` | Enable `fabriq/streaming` add-on (must be installed first) |
+| `GAMING_ENABLED` | No | `false` | Enable `fabriq/gaming` add-on (must be installed first) |
 
 ---
 
@@ -645,9 +645,9 @@ This triggers the `.github/workflows/split.yml` workflow, which:
 2. Pushes the split code to each read-only repository (e.g., `easiviotech/fabriq-kernel`)
 3. Creates the `v1.1.0` tag on each split repository
 
-Packagist then detects the new tag and makes it available as `fabriq/kernel:1.1.0`, `fabriq/streaming:1.1.0`, etc.
+Packagist then detects the new tag and makes it available as `fabriq/kernel:1.1.0`, etc.
 
-**Published packages:**
+**Core packages:**
 
 | Package | Packagist URL |
 |---------|---------------|
@@ -655,6 +655,11 @@ Packagist then detects the new tag and makes it available as `fabriq/kernel:1.1.
 | `fabriq/storage` | [packagist.org/packages/fabriq/storage](https://packagist.org/packages/fabriq/storage) |
 | `fabriq/observability` | [packagist.org/packages/fabriq/observability](https://packagist.org/packages/fabriq/observability) |
 | `fabriq/tenancy` | [packagist.org/packages/fabriq/tenancy](https://packagist.org/packages/fabriq/tenancy) |
+
+**Add-on packages (optional — install only if needed):**
+
+| Package | Packagist URL |
+|---------|---------------|
 | `fabriq/streaming` | [packagist.org/packages/fabriq/streaming](https://packagist.org/packages/fabriq/streaming) |
 | `fabriq/gaming` | [packagist.org/packages/fabriq/gaming](https://packagist.org/packages/fabriq/gaming) |
 

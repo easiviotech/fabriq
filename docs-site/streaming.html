@@ -19,15 +19,15 @@
 <div id="docs-content">
     <div id="docs-content-inner" class="docs-content">
 
-        <h1>Live Streaming</h1>
-        <p>Fabriq provides a complete live streaming infrastructure as a built-in package. It replaces expensive hosted signaling services (Agora, LiveKit) and media servers by running the <strong>control plane in PHP</strong> and delegating the <strong>media plane to FFmpeg</strong> &mdash; all within the same Swoole process.</p>
+        <h1>Live Streaming <span style="font-size:0.5em;color:#888;font-weight:normal;">add-on package</span></h1>
+        <p>The <code>fabriq/streaming</code> package provides a complete live streaming infrastructure as an optional add-on. It replaces expensive hosted signaling services (Agora, LiveKit) and media servers by running the <strong>control plane in PHP</strong> and delegating the <strong>media plane to FFmpeg</strong> &mdash; all within the same Swoole process.</p>
 
         <div class="tip">
-            <strong>Install via Composer:</strong> <code>composer require fabriq/streaming</code> &mdash; this pulls in <code>fabriq/kernel</code>, <code>fabriq/storage</code>, and <code>fabriq/observability</code> automatically. <a href="https://packagist.org/packages/fabriq/streaming" target="_blank">View on Packagist &rarr;</a>
+            <strong>Install:</strong> <code>composer require fabriq/streaming</code> &mdash; this pulls in <code>fabriq/kernel</code>, <code>fabriq/storage</code>, and <code>fabriq/observability</code> automatically. <a href="https://packagist.org/packages/fabriq/streaming" target="_blank">View on Packagist &rarr;</a>
         </div>
 
         <div class="tip">
-            <strong>Opt-in:</strong> Streaming is disabled by default. To enable it: <strong>1)</strong> set <code>STREAMING_ENABLED=1</code> environment variable (or <code>'enabled' =&gt; true</code> in <code>config/streaming.php</code>), and <strong>2)</strong> uncomment <code>StreamingServiceProvider</code> in <code>config/app.php</code>.
+            <strong>Enable:</strong> This package is disabled by default. After installing: <strong>1)</strong> set <code>STREAMING_ENABLED=1</code> environment variable (or <code>'enabled' =&gt; true</code> in <code>config/streaming.php</code>), and <strong>2)</strong> uncomment <code>StreamingServiceProvider</code> in <code>config/app.php</code>.
         </div>
 
         <div class="tip">

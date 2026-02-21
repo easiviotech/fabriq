@@ -106,22 +106,45 @@ Every execution path requires TenantContext:
 
 ## Package Distribution
 
-Fabriq uses a **monorepo split** approach (the same pattern used by Laravel and Symfony). Code lives in `packages/` within the monorepo, and a GitHub Actions workflow automatically splits each package into its own read-only repository on every push to `main`. These split repositories are registered on [Packagist](https://packagist.org), making individual packages installable via Composer:
+Fabriq uses a **monorepo split** approach (the same pattern used by Laravel and Symfony). Code lives in `packages/` within the monorepo, and a GitHub Actions workflow automatically splits each package into its own read-only repository on every push to `main`. These split repositories are registered on [Packagist](https://packagist.org).
+
+### Core Packages
+
+These packages are always present and form the foundation of every Fabriq application:
 
 ```bash
-composer require fabriq/streaming
-composer require fabriq/gaming
+composer require fabriq/kernel
+composer require fabriq/storage
+composer require fabriq/observability
+composer require fabriq/tenancy
 ```
+
+### Add-on Packages
+
+**Streaming** and **Gaming** are optional add-on packages, disabled by default. Install them only if your application needs the capability:
+
+```bash
+composer require fabriq/streaming   # Live streaming (WebRTC, HLS, FFmpeg)
+composer require fabriq/gaming      # Game server (tick loop, matchmaking, UDP)
+```
+
+After installing, enable each add-on by setting `STREAMING_ENABLED=1` or `GAMING_ENABLED=1` and uncommenting the service provider in `config/app.php`.
 
 ### Dependency Graph
 
 ```
-fabriq/streaming ──→ fabriq/kernel, fabriq/storage, fabriq/observability
-fabriq/gaming    ──→ fabriq/kernel, fabriq/storage, fabriq/observability, rybakit/msgpack
-fabriq/storage   ──→ fabriq/kernel
-fabriq/observability ──→ fabriq/kernel
-fabriq/tenancy   ──→ fabriq/kernel
-fabriq/kernel    ──→ (suggests: fabriq/storage, fabriq/observability, fabriq/tenancy)
+                 ┌─── Core ───────────────────────────────────┐
+                 │ fabriq/kernel (foundation)                  │
+                 │ fabriq/storage   ──→ fabriq/kernel          │
+                 │ fabriq/observability ──→ fabriq/kernel      │
+                 │ fabriq/tenancy   ──→ fabriq/kernel          │
+                 └────────────────────────────────────────────┘
+
+                 ┌─── Add-ons (optional) ────────────────────┐
+                 │ fabriq/streaming ──→ kernel, storage, obs  │
+                 │ fabriq/gaming    ──→ kernel, storage, obs  │
+                 │                  ──→ rybakit/msgpack        │
+                 └────────────────────────────────────────────┘
 ```
 
 When developing in the monorepo, the root `composer.json` has a `replace` section so Composer knows all sub-packages are already present.

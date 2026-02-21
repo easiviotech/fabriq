@@ -41,16 +41,16 @@ The [Swoole ecosystem](https://github.com/swoole/awesome-swoole) has many excell
 
 ### Unified Runtime — Not Just an HTTP Framework
 
-Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships **six workloads in a single process** out of the box:
+Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships **four core workloads in a single process** out of the box, with optional add-on packages for specialized use cases:
 
-| Workload | How It Works in Fabriq |
-|---|---|
-| **HTTP API** | Middleware chain → Router → Controllers |
-| **WebSocket Gateway** | Same port, JWT auth on upgrade, rooms, presence, cross-worker push via Redis Pub/Sub |
-| **Background Jobs** | Redis Streams, consumer groups, retry with backoff, dead-letter queue |
-| **Event Bus** | Redis Streams, publish/subscribe, built-in deduplication |
-| **Live Streaming** | WebRTC signaling (SDP/ICE), FFmpeg transcoding (RTMP → HLS), viewer tracking, chat moderation |
-| **Game Server** | Fixed tick-rate game loop, UDP protocol (MessagePack), Redis ZSET matchmaking, lobby system, delta state sync |
+| Workload | Type | How It Works in Fabriq |
+|---|---|---|
+| **HTTP API** | Core | Middleware chain → Router → Controllers |
+| **WebSocket Gateway** | Core | Same port, JWT auth on upgrade, rooms, presence, cross-worker push via Redis Pub/Sub |
+| **Background Jobs** | Core | Redis Streams, consumer groups, retry with backoff, dead-letter queue |
+| **Event Bus** | Core | Redis Streams, publish/subscribe, built-in deduplication |
+| **Live Streaming** | Add-on (`fabriq/streaming`) | WebRTC signaling (SDP/ICE), FFmpeg transcoding (RTMP → HLS), viewer tracking, chat moderation |
+| **Game Server** | Add-on (`fabriq/gaming`) | Fixed tick-rate game loop, UDP protocol (MessagePack), Redis ZSET matchmaking, lobby system, delta state sync |
 
 In Hyperf, for example, you combine `hyperf/http-server` + `hyperf/websocket-server` + `hyperf/async-queue` + `hyperf/event` — all from different packages with different paradigms. Fabriq's subsystems are **designed together** and share the same `Context`, `DbManager`, and tenant scoping.
 
@@ -140,11 +140,11 @@ Unlike Hyperf (Spring Boot / Java annotations), Swoft (annotation-heavy), or Mix
 | Connection pool safety | Basic | Via Swoole | Basic | **✅ Health + idle + tenant** |
 | Laravel-style DX | ❌ (Spring-like) | ✅ (is Laravel) | ❌ | **✅** |
 | Single unified runtime | Partial | ❌ (FPM bridge) | Partial | **✅** |
-| Live Streaming (WebRTC + HLS) | ❌ | ❌ | ❌ | **✅ Built-in** |
-| Game Server (tick loop + matchmaking) | ❌ | ❌ | ❌ | **✅ Built-in** |
-| UDP Protocol (MessagePack) | ❌ | ❌ | ❌ | **✅ Built-in** |
+| Live Streaming (WebRTC + HLS) | ❌ | ❌ | ❌ | **✅ Add-on** (`fabriq/streaming`) |
+| Game Server (tick loop + matchmaking) | ❌ | ❌ | ❌ | **✅ Add-on** (`fabriq/gaming`) |
+| UDP Protocol (MessagePack) | ❌ | ❌ | ❌ | **✅ Add-on** (`fabriq/gaming`) |
 
-**In short:** Fabriq is the only Swoole platform that ships multi-tenancy, realtime, queues, events, idempotency, RBAC+ABAC, **a custom ORM with per-tenant DB routing and stored procedures**, **live streaming, and a game server engine** as a **unified, coherent system** — with a Laravel-familiar developer experience.
+**In short:** Fabriq is the only Swoole platform that ships multi-tenancy, realtime, queues, events, idempotency, RBAC+ABAC, and **a custom ORM with per-tenant DB routing and stored procedures** as a **unified, coherent system** — with optional add-on packages for **live streaming** and a **game server engine**, all with a Laravel-familiar developer experience.
 
 ---
 
@@ -1885,11 +1885,14 @@ Context::all();
 
 ---
 
-## 19. Live Streaming *(opt-in)*
+## 19. Live Streaming *(add-on package: `fabriq/streaming`)*
 
-Fabriq includes a built-in live streaming engine that runs inside the same Swoole process. It supports **WebRTC signaling**, **RTMP-to-HLS transcoding** via FFmpeg, **viewer tracking**, and **chat moderation** — all multi-tenant and coroutine-safe.
+The `fabriq/streaming` package provides a complete live streaming engine that runs inside the same Swoole process. It supports **WebRTC signaling**, **RTMP-to-HLS transcoding** via FFmpeg, **viewer tracking**, and **chat moderation** — all multi-tenant and coroutine-safe.
 
-> **Disabled by default.** To enable: set `STREAMING_ENABLED=1` (or `'enabled' => true` in `config/streaming.php`) and uncomment `StreamingServiceProvider` in `config/app.php`.
+> **This is an optional add-on package, disabled by default.** To enable:
+> 1. Install: `composer require fabriq/streaming`
+> 2. Set `STREAMING_ENABLED=1` (or `'enabled' => true` in `config/streaming.php`)
+> 3. Uncomment `StreamingServiceProvider` in `config/app.php`
 
 ### Architecture
 
@@ -2021,11 +2024,14 @@ Register in `config/app.php`:
 
 ---
 
-## 20. Game Server *(opt-in)*
+## 20. Game Server *(add-on package: `fabriq/gaming`)*
 
-Fabriq includes a real-time game server engine that runs inside the same Swoole process. It supports **casual, .io-style, and competitive games** with configurable tick rates, matchmaking, lobbies, and state synchronization.
+The `fabriq/gaming` package provides a real-time game server engine that runs inside the same Swoole process. It supports **casual, .io-style, and competitive games** with configurable tick rates, matchmaking, lobbies, and state synchronization.
 
-> **Disabled by default.** To enable: set `GAMING_ENABLED=1` (or `'enabled' => true` in `config/gaming.php`), uncomment `GamingServiceProvider` in `config/app.php`, and install `composer require rybakit/msgpack`.
+> **This is an optional add-on package, disabled by default.** To enable:
+> 1. Install: `composer require fabriq/gaming`
+> 2. Set `GAMING_ENABLED=1` (or `'enabled' => true` in `config/gaming.php`)
+> 3. Uncomment `GamingServiceProvider` in `config/app.php`
 
 ### Architecture
 
