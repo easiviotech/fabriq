@@ -20,24 +20,24 @@
     <div id="docs-content-inner" class="docs-content">
 
         <h1>Why Fabriq?</h1>
-        <p>The <a href="https://github.com/swoole/awesome-swoole" target="_blank" rel="noopener">Swoole ecosystem</a> has many excellent projects &mdash; from general-purpose frameworks like Hyperf and Swoft to single-purpose libraries for connection pools, MQTT, and gRPC. Fabriq sits in a unique position: a <strong>unified, multi-tenant backend platform</strong> with a Laravel-familiar developer experience &mdash; including built-in live streaming and game server capabilities.</p>
+        <p>The <a href="https://github.com/swoole/awesome-swoole" target="_blank" rel="noopener">Swoole ecosystem</a> has many excellent projects &mdash; from general-purpose frameworks like Hyperf and Swoft to single-purpose libraries for connection pools, MQTT, and gRPC. Fabriq sits in a unique position: a <strong>unified, multi-tenant backend platform</strong> with a Laravel-familiar developer experience. Optional add-on packages extend the platform with <a href="streaming.html">live streaming</a> and <a href="gaming.html">game server</a> capabilities.</p>
 
         <!-- ── Unified Runtime ──────────────────────────────────────── -->
         <h2 id="unified-runtime">Unified Runtime &mdash; Not Just an HTTP Framework</h2>
 
-        <p>Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships <strong>six workloads in a single process</strong> out of the box:</p>
+        <p>Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships <strong>four core workloads in a single process</strong> out of the box, with optional add-on packages for specialized use cases:</p>
 
         <table>
             <thead>
-                <tr><th>Workload</th><th>How It Works in Fabriq</th></tr>
+                <tr><th>Workload</th><th>Type</th><th>How It Works in Fabriq</th></tr>
             </thead>
             <tbody>
-                <tr><td><strong>HTTP API</strong></td><td>Middleware chain &rarr; Router &rarr; Controllers</td></tr>
-                <tr><td><strong>WebSocket Gateway</strong></td><td>Same port, JWT auth on upgrade, rooms, presence, cross-worker push via Redis Pub/Sub</td></tr>
-                <tr><td><strong>Background Jobs</strong></td><td>Redis Streams, consumer groups, retry with backoff, dead-letter queue</td></tr>
-                <tr><td><strong>Event Bus</strong></td><td>Redis Streams, publish/subscribe, built-in deduplication</td></tr>
-                <tr><td><strong>Live Streaming</strong></td><td>WebRTC signaling (SDP/ICE), FFmpeg transcoding (RTMP &rarr; HLS), viewer tracking, chat moderation</td></tr>
-                <tr><td><strong>Game Server</strong></td><td>Fixed tick-rate game loop, UDP protocol (MessagePack), Redis ZSET matchmaking, lobby system, delta state sync</td></tr>
+                <tr><td><strong>HTTP API</strong></td><td>Core</td><td>Middleware chain &rarr; Router &rarr; Controllers</td></tr>
+                <tr><td><strong>WebSocket Gateway</strong></td><td>Core</td><td>Same port, JWT auth on upgrade, rooms, presence, cross-worker push via Redis Pub/Sub</td></tr>
+                <tr><td><strong>Background Jobs</strong></td><td>Core</td><td>Redis Streams, consumer groups, retry with backoff, dead-letter queue</td></tr>
+                <tr><td><strong>Event Bus</strong></td><td>Core</td><td>Redis Streams, publish/subscribe, built-in deduplication</td></tr>
+                <tr><td><strong>Live Streaming</strong></td><td>Add-on (<code>fabriq/streaming</code>)</td><td>WebRTC signaling (SDP/ICE), FFmpeg transcoding (RTMP &rarr; HLS), viewer tracking, chat moderation</td></tr>
+                <tr><td><strong>Game Server</strong></td><td>Add-on (<code>fabriq/gaming</code>)</td><td>Fixed tick-rate game loop, UDP protocol (MessagePack), Redis ZSET matchmaking, lobby system, delta state sync</td></tr>
             </tbody>
         </table>
 
@@ -325,21 +325,21 @@ $result = $store->once(
                     <td>&cross;</td>
                     <td>&cross;</td>
                     <td>&cross;</td>
-                    <td><strong>&check; Built-in</strong></td>
+                    <td><strong>&check; Add-on</strong> (<code>fabriq/streaming</code>)</td>
                 </tr>
                 <tr>
                     <td>Game Server Engine</td>
                     <td>&cross;</td>
                     <td>&cross;</td>
                     <td>&cross;</td>
-                    <td><strong>&check; Tick loop + matchmaking</strong></td>
+                    <td><strong>&check; Add-on</strong> (<code>fabriq/gaming</code>)</td>
                 </tr>
                 <tr>
                     <td>UDP Protocol Support</td>
                     <td>&cross;</td>
                     <td>&cross;</td>
                     <td>&cross;</td>
-                    <td><strong>&check; MessagePack binary</strong></td>
+                    <td><strong>&check; Add-on</strong> (<code>fabriq/gaming</code>)</td>
                 </tr>
             </tbody>
         </table>
@@ -347,9 +347,9 @@ $result = $store->once(
         <!-- ── Summary ─────────────────────────────────────────────────── -->
         <h2 id="summary">Summary</h2>
 
-        <p>Fabriq is the only Swoole platform that ships <strong>multi-tenancy, a custom ORM with per-tenant DB routing and stored procedures, realtime, queues, events, idempotency, RBAC+ABAC, live streaming, and a game server engine as a unified, coherent system</strong> &mdash; with a Laravel-familiar developer experience.</p>
+        <p>Fabriq is the only Swoole platform that ships <strong>multi-tenancy, a custom ORM with per-tenant DB routing and stored procedures, realtime, queues, events, idempotency, and RBAC+ABAC as a unified, coherent system</strong> &mdash; with a Laravel-familiar developer experience. Optional add-on packages for <strong><a href="streaming.html">live streaming</a></strong> (<code>fabriq/streaming</code>) and a <strong><a href="gaming.html">game server engine</a></strong> (<code>fabriq/gaming</code>) extend the platform when needed.</p>
 
-        <p>Everything else in the ecosystem requires you to glue together separate packages and handle tenant isolation, cross-worker routing, idempotency, streaming infrastructure, and game server logic yourself.</p>
+        <p>Everything else in the ecosystem requires you to glue together separate packages and handle tenant isolation, cross-worker routing, and idempotency yourself &mdash; let alone streaming or game server infrastructure.</p>
 
         <div class="callout tip">
             <div class="callout-title">Ready to get started?</div>
