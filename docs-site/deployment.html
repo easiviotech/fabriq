@@ -540,6 +540,30 @@ kubectl set image deployment/fabriq-web fabriq=your-registry.com/fabriq:1.1.0
 kubectl set image deployment/fabriq-processor fabriq=your-registry.com/fabriq:1.1.0
 kubectl set image deployment/fabriq-scheduler fabriq=your-registry.com/fabriq:1.1.0</code></pre>
 
+        <h3>Releasing New Versions (Packagist)</h3>
+
+        <p>Fabriq uses a monorepo split workflow to publish individual packages to <a href="https://packagist.org" target="_blank">Packagist</a>. When you tag a release on the monorepo, the GitHub Actions workflow automatically propagates the tag to all split repositories:</p>
+
+        <pre><code class="language-bash"># Tag a new version on the monorepo
+git tag v1.1.0
+git push origin v1.1.0</code></pre>
+
+        <p>This triggers <code>.github/workflows/split.yml</code>, which splits each <code>packages/&lt;name&gt;</code> directory using <code>splitsh/lite</code>, pushes to the corresponding read-only repository (e.g., <code>easiviotech/fabriq-kernel</code>), and creates the version tag. Packagist then detects the new tag and makes it available.</p>
+
+        <table>
+            <thead>
+                <tr><th>Package</th><th>Packagist</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>fabriq/kernel</code></td><td><a href="https://packagist.org/packages/fabriq/kernel">packagist.org/packages/fabriq/kernel</a></td></tr>
+                <tr><td><code>fabriq/storage</code></td><td><a href="https://packagist.org/packages/fabriq/storage">packagist.org/packages/fabriq/storage</a></td></tr>
+                <tr><td><code>fabriq/observability</code></td><td><a href="https://packagist.org/packages/fabriq/observability">packagist.org/packages/fabriq/observability</a></td></tr>
+                <tr><td><code>fabriq/tenancy</code></td><td><a href="https://packagist.org/packages/fabriq/tenancy">packagist.org/packages/fabriq/tenancy</a></td></tr>
+                <tr><td><code>fabriq/streaming</code></td><td><a href="https://packagist.org/packages/fabriq/streaming">packagist.org/packages/fabriq/streaming</a></td></tr>
+                <tr><td><code>fabriq/gaming</code></td><td><a href="https://packagist.org/packages/fabriq/gaming">packagist.org/packages/fabriq/gaming</a></td></tr>
+            </tbody>
+        </table>
+
         <h3>Database Migrations</h3>
 
         <p>Run migrations <strong>before</strong> deploying new application code:</p>

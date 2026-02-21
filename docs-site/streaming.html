@@ -23,6 +23,10 @@
         <p>Fabriq provides a complete live streaming infrastructure as a built-in package. It replaces expensive hosted signaling services (Agora, LiveKit) and media servers by running the <strong>control plane in PHP</strong> and delegating the <strong>media plane to FFmpeg</strong> &mdash; all within the same Swoole process.</p>
 
         <div class="tip">
+            <strong>Install via Composer:</strong> <code>composer require fabriq/streaming</code> &mdash; this pulls in <code>fabriq/kernel</code>, <code>fabriq/storage</code>, and <code>fabriq/observability</code> automatically. <a href="https://packagist.org/packages/fabriq/streaming" target="_blank">View on Packagist &rarr;</a>
+        </div>
+
+        <div class="tip">
             <strong>Cost Savings:</strong> By combining signaling, chat, and stream management into a single Fabriq process, you eliminate $49&ndash;$500/month in third-party signaling costs and $20&ndash;$100/month for a separate chat server.
         </div>
 

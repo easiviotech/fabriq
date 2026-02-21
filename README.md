@@ -122,7 +122,7 @@ This builds the app image (PHP 8.3 + Swoole + Redis extension) and starts **six 
 | `fabriq-redis` | Redis 7 | `localhost:6379` |
 | `fabriq-adminer` | Adminer (DB GUI) | [http://localhost:8080](http://localhost:8080) |
 
-All application containers (app, worker, scheduler) start automatically. The worker and scheduler have `restart: unless-stopped` for crash recovery. Wait for MySQL to pass its health check (~15–30 seconds) before the services connect.
+All application containers (app, processor, scheduler) start automatically. The processor and scheduler have `restart: unless-stopped` for crash recovery. Wait for MySQL to pass its health check (~15–30 seconds) before the services connect.
 
 ### 4. Verify the server is running
 
@@ -151,7 +151,7 @@ docker compose -f infra/docker-compose.yml logs -f
 
 # Individual services
 docker compose -f infra/docker-compose.yml logs -f app
-docker compose -f infra/docker-compose.yml logs -f worker
+docker compose -f infra/docker-compose.yml logs -f processor
 docker compose -f infra/docker-compose.yml logs -f scheduler
 ```
 
@@ -301,6 +301,47 @@ The `docs-site/` directory contains a full HTML documentation site with syntax-h
 | `gaming.html` | Game Server (tick loop, matchmaking, lobbies, state sync) |
 | `operations.html` | Operations (logging, metrics, testing, deployment) |
 | `deployment.html` | Production Deployment (Docker, Kubernetes, cloud, TLS, checklist) |
+
+---
+
+## Packagist Packages
+
+Fabriq's core packages are published individually on [Packagist](https://packagist.org), so you can install only what you need:
+
+```bash
+composer require fabriq/kernel
+composer require fabriq/storage
+composer require fabriq/observability
+composer require fabriq/tenancy
+composer require fabriq/streaming
+composer require fabriq/gaming
+```
+
+| Package | Packagist | Description |
+|---------|-----------|-------------|
+| [`fabriq/kernel`](https://packagist.org/packages/fabriq/kernel) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/kernel)](https://packagist.org/packages/fabriq/kernel) | Core container, config, context, server, service providers |
+| [`fabriq/storage`](https://packagist.org/packages/fabriq/storage) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/storage)](https://packagist.org/packages/fabriq/storage) | Connection pools, DbManager, tenant-aware repositories |
+| [`fabriq/observability`](https://packagist.org/packages/fabriq/observability) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/observability)](https://packagist.org/packages/fabriq/observability) | Structured logging, metrics, tracing |
+| [`fabriq/tenancy`](https://packagist.org/packages/fabriq/tenancy) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/tenancy)](https://packagist.org/packages/fabriq/tenancy) | Multi-tenant context, resolution, config caching |
+| [`fabriq/streaming`](https://packagist.org/packages/fabriq/streaming) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/streaming)](https://packagist.org/packages/fabriq/streaming) | WebRTC signaling, HLS transcoding, viewer tracking, chat |
+| [`fabriq/gaming`](https://packagist.org/packages/fabriq/gaming) | [![Latest Version](https://img.shields.io/packagist/v/fabriq/gaming)](https://packagist.org/packages/fabriq/gaming) | Game loop, matchmaking, lobbies, UDP protocol, state sync |
+
+### Dependency Graph
+
+```
+fabriq/streaming ──→ fabriq/kernel
+                 ──→ fabriq/storage ──→ fabriq/kernel
+                 ──→ fabriq/observability ──→ fabriq/kernel
+
+fabriq/gaming ──→ fabriq/kernel
+              ──→ fabriq/storage
+              ──→ fabriq/observability
+              ──→ rybakit/msgpack
+
+fabriq/tenancy ──→ fabriq/kernel (optional, suggested by kernel)
+```
+
+When you `composer require fabriq/streaming`, Composer automatically pulls in `fabriq/kernel`, `fabriq/storage`, and `fabriq/observability`.
 
 ---
 

@@ -104,6 +104,30 @@ Every execution path requires TenantContext:
 | ORM Models | `HasTenantScope` trait auto-injects `tenant_id` in all queries and inserts |
 | Stored Procedures | `ProcedureCall` routes through `TenantDbRouter` to correct tenant DB |
 
+## Package Distribution
+
+Fabriq uses a **monorepo split** approach (the same pattern used by Laravel and Symfony). Code lives in `packages/` within the monorepo, and a GitHub Actions workflow automatically splits each package into its own read-only repository on every push to `main`. These split repositories are registered on [Packagist](https://packagist.org), making individual packages installable via Composer:
+
+```bash
+composer require fabriq/streaming
+composer require fabriq/gaming
+```
+
+### Dependency Graph
+
+```
+fabriq/streaming ──→ fabriq/kernel, fabriq/storage, fabriq/observability
+fabriq/gaming    ──→ fabriq/kernel, fabriq/storage, fabriq/observability, rybakit/msgpack
+fabriq/storage   ──→ fabriq/kernel
+fabriq/observability ──→ fabriq/kernel
+fabriq/tenancy   ──→ fabriq/kernel
+fabriq/kernel    ──→ (suggests: fabriq/storage, fabriq/observability, fabriq/tenancy)
+```
+
+When developing in the monorepo, the root `composer.json` has a `replace` section so Composer knows all sub-packages are already present.
+
+---
+
 ## Long-Running Safety
 
 | Rule | Implementation |

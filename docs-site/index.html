@@ -188,6 +188,36 @@ sudo mv composer.phar /usr/local/bin/composer
 cd myapp
 composer install</code></pre>
 
+        <h3 id="individual-packages">Using Individual Packages (Packagist)</h3>
+
+        <p>Fabriq's core packages are published on <a href="https://packagist.org" target="_blank">Packagist</a>. Install only what you need:</p>
+
+        <pre><code class="language-bash"># Install the streaming package (pulls in kernel, storage, observability)
+composer require fabriq/streaming
+
+# Install the gaming package
+composer require fabriq/gaming
+
+# Or pick specific packages
+composer require fabriq/kernel
+composer require fabriq/storage
+composer require fabriq/observability
+composer require fabriq/tenancy</code></pre>
+
+        <table>
+            <thead>
+                <tr><th>Package</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code><a href="https://packagist.org/packages/fabriq/kernel">fabriq/kernel</a></code></td><td>Core container, config, context, server, service providers</td></tr>
+                <tr><td><code><a href="https://packagist.org/packages/fabriq/storage">fabriq/storage</a></code></td><td>Connection pools, DbManager, tenant-aware repositories</td></tr>
+                <tr><td><code><a href="https://packagist.org/packages/fabriq/observability">fabriq/observability</a></code></td><td>Structured logging, metrics, distributed tracing</td></tr>
+                <tr><td><code><a href="https://packagist.org/packages/fabriq/tenancy">fabriq/tenancy</a></code></td><td>Multi-tenant resolution, context, config caching</td></tr>
+                <tr><td><code><a href="https://packagist.org/packages/fabriq/streaming">fabriq/streaming</a></code></td><td>WebRTC signaling, HLS transcoding, viewer tracking, chat</td></tr>
+                <tr><td><code><a href="https://packagist.org/packages/fabriq/gaming">fabriq/gaming</a></code></td><td>Game loop, matchmaking, lobbies, UDP protocol, state sync</td></tr>
+            </tbody>
+        </table>
+
         <!-- ── Quick Start ─────────────────────────────────────────── -->
         <h2 id="quick-start">Quick Start</h2>
 

@@ -315,6 +315,33 @@ cd myapp
 composer install
 ```
 
+#### Using Individual Packages
+
+Fabriq's core packages are published on [Packagist](https://packagist.org). If you only need specific functionality (e.g., streaming or gaming), install individual packages:
+
+```bash
+# Install just the streaming package (pulls in kernel, storage, observability automatically)
+composer require fabriq/streaming
+
+# Install just the gaming package
+composer require fabriq/gaming
+
+# Or pick specific packages
+composer require fabriq/kernel
+composer require fabriq/storage
+composer require fabriq/observability
+composer require fabriq/tenancy
+```
+
+| Package | Description |
+|---------|-------------|
+| `fabriq/kernel` | Core container, config, context, server, service providers |
+| `fabriq/storage` | Connection pools, DbManager, tenant-aware repositories |
+| `fabriq/observability` | Structured logging, metrics, distributed tracing |
+| `fabriq/tenancy` | Multi-tenant resolution, context, config caching |
+| `fabriq/streaming` | WebRTC signaling, HLS transcoding, viewer tracking, chat moderation |
+| `fabriq/gaming` | Game loop, matchmaking, lobbies, UDP protocol, state sync |
+
 ### Quick Start (Docker — Recommended)
 
 > **Note:** Swoole does not run natively on Windows. Docker is the recommended (and required on Windows) way to run Fabriq.

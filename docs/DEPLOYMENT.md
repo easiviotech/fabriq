@@ -627,6 +627,37 @@ kubectl set image deployment/fabriq-scheduler fabriq=your-registry.com/fabriq:1.
 
 Kubernetes handles rolling updates automatically — it starts new pods, waits for readiness probes, then terminates old pods.
 
+### Releasing New Versions (Packagist)
+
+Fabriq uses a monorepo split workflow to publish individual packages to [Packagist](https://packagist.org). When you tag a release on the monorepo, the GitHub Actions workflow automatically propagates the tag to all split repositories, and Packagist picks them up as new versions.
+
+```bash
+# Tag a new version on the monorepo
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+This triggers the `.github/workflows/split.yml` workflow, which:
+
+1. Splits each `packages/<name>` directory using `splitsh/lite`
+2. Pushes the split code to each read-only repository (e.g., `easiviotech/fabriq-kernel`)
+3. Creates the `v1.1.0` tag on each split repository
+
+Packagist then detects the new tag and makes it available as `fabriq/kernel:1.1.0`, `fabriq/streaming:1.1.0`, etc.
+
+**Published packages:**
+
+| Package | Packagist URL |
+|---------|---------------|
+| `fabriq/kernel` | [packagist.org/packages/fabriq/kernel](https://packagist.org/packages/fabriq/kernel) |
+| `fabriq/storage` | [packagist.org/packages/fabriq/storage](https://packagist.org/packages/fabriq/storage) |
+| `fabriq/observability` | [packagist.org/packages/fabriq/observability](https://packagist.org/packages/fabriq/observability) |
+| `fabriq/tenancy` | [packagist.org/packages/fabriq/tenancy](https://packagist.org/packages/fabriq/tenancy) |
+| `fabriq/streaming` | [packagist.org/packages/fabriq/streaming](https://packagist.org/packages/fabriq/streaming) |
+| `fabriq/gaming` | [packagist.org/packages/fabriq/gaming](https://packagist.org/packages/fabriq/gaming) |
+
+---
+
 ### Database Migrations
 
 Run migrations **before** deploying new application code:

@@ -23,6 +23,10 @@
         <p>Fabriq includes a real-time game server engine that runs inside the same Swoole process as your HTTP and WebSocket handlers. It supports <strong>casual, .io-style, MMORPG, MOBA, and competitive games</strong> &mdash; all without a separate game server.</p>
 
         <div class="tip">
+            <strong>Install via Composer:</strong> <code>composer require fabriq/gaming</code> &mdash; this pulls in <code>fabriq/kernel</code>, <code>fabriq/storage</code>, <code>fabriq/observability</code>, and <code>rybakit/msgpack</code> automatically. <a href="https://packagist.org/packages/fabriq/gaming" target="_blank">View on Packagist &rarr;</a>
+        </div>
+
+        <div class="tip">
             <strong>Cost Savings:</strong> A typical Node.js game server costs $20&ndash;$100/month per instance. By running the game loop inside Fabriq, you eliminate this cost entirely while gaining coroutine-safe database access, multi-tenancy, and built-in matchmaking.
         </div>
 
