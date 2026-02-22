@@ -25,7 +25,7 @@
         <!-- ── Unified Runtime ──────────────────────────────────────── -->
         <h2 id="unified-runtime">Unified Runtime &mdash; Not Just an HTTP Framework</h2>
 
-        <p>Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships <strong>four core workloads in a single process</strong> out of the box, with optional add-on packages for specialized use cases:</p>
+        <p>Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships <strong>five core workloads in a single process</strong> out of the box, with optional add-on packages for specialized use cases:</p>
 
         <table>
             <thead>
@@ -33,6 +33,7 @@
             </thead>
             <tbody>
                 <tr><td><strong>HTTP API</strong></td><td>Core</td><td>Middleware chain &rarr; Router &rarr; Controllers</td></tr>
+                <tr><td><strong>Frontend Serving</strong></td><td>Core</td><td>Per-tenant static files with SPA fallback, custom domain resolution, built-in CI/CD, atomic deploys</td></tr>
                 <tr><td><strong>WebSocket Gateway</strong></td><td>Core</td><td>Same port, JWT auth on upgrade, rooms, presence, cross-worker push via Redis Pub/Sub</td></tr>
                 <tr><td><strong>Background Jobs</strong></td><td>Core</td><td>Redis Streams, consumer groups, retry with backoff, dead-letter queue</td></tr>
                 <tr><td><strong>Event Bus</strong></td><td>Core</td><td>Redis Streams, publish/subscribe, built-in deduplication</td></tr>
@@ -162,6 +163,37 @@ $result = $store->once(
         </ul>
 
         <p>In the Swoole ecosystem, WebSocket tools like Utopia WebSocket handle basic WS, but none offer cross-worker routing with tenant-scoped rooms and presence.</p>
+
+        <!-- ── Frontend Serving ──────────────────────────────────────────── -->
+        <h2 id="frontend-serving">Unified Frontend Serving &mdash; API + UI from One Process</h2>
+
+        <p><strong>No other Swoole framework serves per-tenant frontends.</strong> In every other framework, you need Nginx, Apache, or a separate CDN to serve your frontend. With Fabriq, the same Swoole process that handles your API also delivers each tenant&rsquo;s HTML, CSS, and JavaScript.</p>
+
+        <table>
+            <thead>
+                <tr><th>Traditional Approach</th><th>Fabriq Approach</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Nginx serves static files, PHP-FPM handles API</td><td>Single Swoole process serves both</td></tr>
+                <tr><td>CORS headers required (separate origins)</td><td>Same origin &mdash; no CORS, no preflight requests</td></tr>
+                <tr><td>Nginx config per tenant (<code>try_files</code>, <code>server_name</code>)</td><td>Zero config &mdash; tenants resolved from DB/header/JWT</td></tr>
+                <tr><td>Custom domain = new Nginx server block + TLS cert</td><td>Custom domain = one DB row, resolved automatically</td></tr>
+                <tr><td>Separate CI/CD pipeline per tenant frontend</td><td>Built-in <code>FrontendBuilder</code> &mdash; git clone &rarr; build &rarr; atomic deploy</td></tr>
+                <tr><td>Frontend and API deployed/versioned independently</td><td>Ship together, per-tenant atomic swaps</td></tr>
+            </tbody>
+        </table>
+
+        <p>Key advantages:</p>
+
+        <ul>
+            <li><strong>Simpler infrastructure</strong> &mdash; eliminate Nginx/Apache from your stack entirely</li>
+            <li><strong>Tenant-aware</strong> &mdash; frontend resolution shares the same tenant logic as the API (subdomain, header, JWT, custom domain)</li>
+            <li><strong>Framework agnostic</strong> &mdash; tenant A on React, tenant B on Vue, tenant C on Angular &mdash; each just needs a build output directory</li>
+            <li><strong>High performance</strong> &mdash; Swoole&rsquo;s <code>sendfile()</code> uses zero-copy kernel transfer with no PHP memory allocation</li>
+            <li><strong>CDN-ready caching</strong> &mdash; fingerprinted assets get <code>immutable</code> headers; HTML always gets <code>no-cache</code></li>
+        </ul>
+
+        <p>See the <a href="frontend.html">Frontend Serving</a> page for the full guide.</p>
 
         <!-- ── Laravel-Familiar DX ─────────────────────────────────────── -->
         <h2 id="laravel-dx">Laravel-Familiar Developer Experience</h2>

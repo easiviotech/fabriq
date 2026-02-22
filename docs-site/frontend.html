@@ -45,6 +45,72 @@
             <li><strong>Zero config for APIs</strong> &mdash; paths starting with <code>/api</code>, <code>/health</code>, <code>/metrics</code> are never intercepted</li>
         </ul>
 
+        <!-- ── Why Fabriq ─────────────────────────────────────────── -->
+        <h2 id="why-fabriq">Why Serve Frontends Through Fabriq?</h2>
+
+        <p>Most platforms serve frontends through a separate web server (Nginx, Apache) or a dedicated hosting service (Vercel, Netlify, Cloudflare Pages). Fabriq takes a different approach: the <strong>same Swoole process that powers your API also serves your frontend</strong>. Here&rsquo;s why that matters.</p>
+
+        <h3>Simpler Infrastructure</h3>
+
+        <table>
+            <thead>
+                <tr><th>Traditional Setup</th><th>With Fabriq</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Nginx + PHP-FPM + CDN + CI/CD pipeline</td><td>Single Swoole process</td></tr>
+                <tr><td>Separate Nginx config per tenant (<code>try_files</code>, <code>location</code> blocks)</td><td>Zero server config &mdash; tenants resolved automatically</td></tr>
+                <tr><td>Manage DNS, TLS certs, and CDN distribution for each custom domain</td><td>Custom domains resolved via config, code, or DB &mdash; one TLS termination point</td></tr>
+                <tr><td>Deploy frontend and API independently, coordinate versions</td><td>Frontend and API ship together, atomic per-tenant deploys</td></tr>
+            </tbody>
+        </table>
+
+        <h3>No CORS, No Proxy Hops</h3>
+
+        <p>When your frontend and API are served from the same origin, you eliminate an entire class of problems:</p>
+
+        <ul>
+            <li><strong>No CORS headers</strong> &mdash; frontend and API share the same origin, so browsers don&rsquo;t block requests</li>
+            <li><strong>No preflight requests</strong> &mdash; saves a round trip on every API call from the browser</li>
+            <li><strong>No reverse proxy hop</strong> &mdash; requests go directly to Swoole instead of Nginx &rarr; PHP-FPM</li>
+            <li><strong>Simpler cookies/sessions</strong> &mdash; same-origin means no <code>SameSite</code> or third-party cookie issues</li>
+        </ul>
+
+        <h3>Tenant-Aware by Default</h3>
+
+        <p>In a traditional setup, the web server has no concept of tenants &mdash; it just serves files from a directory. With Fabriq:</p>
+
+        <ul>
+            <li>The <strong>same tenant resolution logic</strong> (subdomain, header, JWT, custom domain) is shared between API and frontend serving</li>
+            <li>Adding a new tenant with a custom domain requires <strong>zero server reconfiguration</strong> &mdash; just add a row to the database</li>
+            <li>Suspended tenants can still see a <strong>custom suspension page</strong> from their frontend (Tier 3 DB lookup bypasses the strict <code>TenantResolver</code>)</li>
+            <li>Each tenant can use a <strong>completely different frontend framework</strong> &mdash; tenant A on React, tenant B on Vue, tenant C on plain HTML</li>
+        </ul>
+
+        <h3>High Performance</h3>
+
+        <ul>
+            <li><strong>Swoole <code>sendfile()</code></strong> &mdash; zero-copy file transfer at the kernel level, no PHP memory allocation</li>
+            <li><strong>Fingerprint-based immutable caching</strong> &mdash; hashed filenames get 1-year <code>Cache-Control</code> headers automatically</li>
+            <li><strong>No cold starts</strong> &mdash; Swoole is a long-running process, always ready to serve</li>
+            <li><strong>Single port</strong> &mdash; HTTP API, WebSocket, and frontend all on port 8000 &mdash; simpler load balancing</li>
+        </ul>
+
+        <h3>Built-In CI/CD</h3>
+
+        <p>Instead of configuring a separate CI/CD pipeline (GitHub Actions, Jenkins, etc.) for each tenant&rsquo;s frontend:</p>
+
+        <ul>
+            <li>Tenants store their <strong>Git repo URL</strong> in their config &mdash; Fabriq handles the rest</li>
+            <li>Builds are triggered via <strong>CLI, API, or webhook</strong> &mdash; no external pipeline to maintain</li>
+            <li><strong>Atomic deployments</strong> ensure users never see a half-built state</li>
+            <li>Builds run in <strong>Swoole coroutines</strong> &mdash; non-blocking, no impact on API performance</li>
+        </ul>
+
+        <div class="callout tip">
+            <div class="callout-title">When to use an external CDN instead</div>
+            <p>Fabriq&rsquo;s built-in serving is ideal for SaaS platforms, internal tools, and moderate-traffic applications. For global consumer-facing apps with millions of users, you may want to put a CDN (CloudFront, Cloudflare) in front of Fabriq or serve static assets from object storage (S3). The two approaches aren&rsquo;t mutually exclusive &mdash; Fabriq&rsquo;s <code>Cache-Control</code> headers are CDN-ready out of the box.</p>
+        </div>
+
         <!-- ── Static File Serving ─────────────────────────────────── -->
         <h2 id="static-serving">Static File Serving</h2>
 

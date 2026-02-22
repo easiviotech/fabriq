@@ -243,14 +243,29 @@ curl http://localhost:8000/health
 
 Fabriq serves per-tenant frontend builds directly through Swoole — no Nginx or Apache required. Use any frontend framework (React, Vue, Svelte, Angular, Next.js, etc.) and Fabriq handles the rest.
 
-- **Per-tenant builds** — Each tenant gets their own frontend at `public/{tenant-slug}/`, resolved automatically from subdomain, header, or JWT
+**Why serve frontends through Fabriq instead of Nginx, Vercel, or a CDN?**
+
+| Traditional Setup | With Fabriq |
+|---|---|
+| Nginx + PHP-FPM + CDN + separate CI/CD | Single Swoole process serves API + frontend |
+| Separate Nginx config per tenant | Tenants resolved automatically — zero server config |
+| CORS headers, preflight requests, proxy hops | Same origin — no CORS, no extra round trips |
+| Manage DNS + TLS + CDN per custom domain | Custom domains resolved via config or DB |
+| Deploy frontend and API independently | Frontend and API ship together, atomic per-tenant deploys |
+| No tenant awareness in the web server | Same tenant resolution shared between API and frontend |
+
+**Features:**
+
+- **Per-tenant builds** — Each tenant gets their own frontend at `public/{tenant-slug}/`, resolved automatically from subdomain, header, JWT, or custom domain
+- **High performance** — Swoole's `sendfile()` delivers files via zero-copy kernel transfer, no PHP memory allocation
 - **SPA fallback** — Client-side routing works out of the box (`index.html` served for unmatched paths)
-- **Zero-copy file serving** — Uses Swoole's `sendfile()` for high-performance static delivery
-- **Smart caching** — Fingerprinted assets get immutable/1-year cache; HTML gets no-cache
+- **Smart caching** — Fingerprinted assets get immutable/1-year cache; HTML gets no-cache (CDN-ready)
+- **Custom domains** — 3-tier resolution: static `domain_map` (O(1)), TenantResolver, DB lookup — add a domain by adding a DB row, no server restart
 - **Built-in CI/CD** — Clone a tenant's Git repo, run `npm build`, deploy atomically with zero downtime
 - **Three trigger methods** — CLI (`frontend:build`), API (`POST /api/tenants/{id}/frontend/deploy`), webhook (GitHub/GitLab push)
 - **Atomic deployments** — Old build is swapped out atomically; users never see a half-built state
-- **Fallback directory** — `public/_default/` serves as the shared frontend when a tenant has no custom build
+- **Framework agnostic** — Tenant A on React, tenant B on Vue, tenant C on plain HTML — all served from the same process
+- **Fallback directory** — `public/_default/` serves as the shared frontend (login, marketing) when a tenant has no custom build
 
 > See [FRONTEND.md](docs/FRONTEND.md) for the full guide.
 
