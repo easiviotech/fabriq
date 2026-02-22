@@ -183,10 +183,10 @@
         const page = currentPage();
         let html = `
             <div class="sidebar-brand">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
+                <svg width="28" height="28" viewBox="0 0 100 100" fill="none">
+                    <path d="M35,15 L70,50 L35,85 L0,50Z M35,27 L58,50 L35,73 L12,50Z" fill="#b91c1c" fill-rule="evenodd"/>
+                    <path d="M65,15 L100,50 L65,85 L30,50Z M65,27 L88,50 L65,73 L42,50Z" fill="#dc2626" fill-rule="evenodd"/>
+                    <path d="M50,30 L56,36 L50,42 L44,36Z" fill="#b91c1c"/>
                 </svg>
                 <span class="sidebar-brand-name">Fabriq</span>
                 <span class="sidebar-brand-tag">Docs</span>
