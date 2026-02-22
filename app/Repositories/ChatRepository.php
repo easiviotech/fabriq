@@ -48,6 +48,18 @@ final class ChatRepository
         return $tenant?->toArray();
     }
 
+    public function findTenantById(string $id): ?array
+    {
+        $tenant = Tenant::find($id);
+        return $tenant?->toArray();
+    }
+
+    public function findTenantByDomain(string $domain): ?array
+    {
+        $tenant = Tenant::where('domain', $domain)->first();
+        return $tenant?->toArray();
+    }
+
     public function findApiKeyByPrefix(string $prefix): ?array
     {
         $key = ApiKey::where('key_prefix', $prefix)->first();

@@ -20,7 +20,7 @@
     <div id="docs-content-inner" class="docs-content">
 
         <h1>Multi-Tenancy</h1>
-        <p>Fabriq enforces tenant isolation at the kernel level. Every HTTP request, WebSocket message, queue job, and event carries a <code>tenant_id</code>.</p>
+        <p>Fabriq enforces tenant isolation at the kernel level. Every HTTP request, WebSocket message, queue job, event, and frontend file response carries a <code>tenant_id</code>.</p>
 
         <!-- ── Tenant Resolution ───────────────────────────────────── -->
         <h2 id="resolution">Tenant Resolution</h2>
@@ -181,6 +181,7 @@ $result = DB::call('sp_calculate_invoice')
                 <tr><td>ORM QueryBuilder</td><td><code>tenantScoped()</code> method adds tenant filter; models opt-in via <code>$tenantScoped = true</code></td></tr>
                 <tr><td>DB Routing</td><td><code>TenantDbRouter</code> selects pool/database per tenant strategy</td></tr>
                 <tr><td>Repository</td><td>Base <code>TenantAwareRepository</code> adds <code>WHERE tenant_id = ?</code></td></tr>
+                <tr><td>Frontend Serving</td><td><code>StaticFileMiddleware</code> resolves tenant from domain_map, TenantResolver, or DB lookup — serves from <code>public/{tenant-slug}/</code></td></tr>
             </tbody>
         </table>
 
@@ -220,6 +221,19 @@ final class OrderRepository extends TenantAwareRepository
             <div class="callout-title">Safety</div>
             <p>If <code>tenant_id</code> is not set in the current Context, calling <code>$this->tenantId()</code> will throw a <code>RuntimeException</code>. This fail-fast behavior prevents accidental cross-tenant data access.</p>
         </div>
+
+        <!-- ── Custom Domain Frontend Serving ──────────────────────── -->
+        <h2 id="custom-domains">Custom Domain Frontend Serving</h2>
+
+        <p>Tenants can register custom domains (e.g., <code>app.acme.com</code>) that route to their per-tenant frontend build. The <code>StaticFileMiddleware</code> uses a 3-tier resolution strategy:</p>
+
+        <ol>
+            <li><strong>Static <code>domain_map</code></strong> &mdash; O(1) lookup from <code>config/static.php</code></li>
+            <li><strong>TenantResolver</strong> &mdash; subdomain, <code>X-Tenant</code> header, or JWT claim</li>
+            <li><strong>Database lookup</strong> &mdash; queries the <code>tenants.domain</code> column via <code>ChatRepository::findTenantByDomain()</code></li>
+        </ol>
+
+        <p>See the <a href="frontend.html#custom-domains">Frontend Serving &mdash; Custom Domains</a> section for full details on DNS setup and configuration.</p>
 
         <!-- ── Config Cache ────────────────────────────────────────── -->
         <h2 id="config-cache">Config Cache</h2>

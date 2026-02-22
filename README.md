@@ -1,6 +1,6 @@
 # Fabriq
 
-> **Unified Swoole-powered backend platform** — HTTP APIs, WebSocket realtime, background jobs, event bus, and first-class multi-tenancy. Optional add-on packages for live streaming and game server.
+> **Unified Swoole-powered application platform** — serves HTTP APIs, per-tenant frontend builds, WebSocket realtime, background jobs, and event bus with first-class multi-tenancy. Built-in CI/CD deploys any frontend framework (React, Vue, Svelte, Angular, etc.) from Git. Optional add-on packages for live streaming and game server.
 
 **Brand:** Fabrq • **Runtime:** PHP 8.2+ / Swoole • **License:** Proprietary
 
@@ -8,15 +8,19 @@
 
 ## Architecture
 
-Fabriq is a **long-running Swoole server** that hosts HTTP, WebSocket, queue processors, and event consumers in a single process. Every execution path enforces `TenantContext` — tenant isolation is guaranteed at the kernel level.
+Fabriq is a **long-running Swoole server** that hosts HTTP, frontend static files, WebSocket, queue processors, and event consumers in a single process. Every execution path enforces `TenantContext` — tenant isolation is guaranteed at the kernel level, including per-tenant frontend builds.
+
+The platform serves both your **API** and your **frontend** from a single port — no Nginx or Apache required. Each tenant can have its own frontend build (React, Vue, Svelte, Angular, or any framework), cloned from Git and built automatically via CLI, API, or webhook.
 
 Optional add-on packages extend the platform with **live streaming** (`fabriq/streaming`) and a **real-time game server** (`fabriq/gaming`) — install only what you need.
 
 ```
 Client → HTTP/WS/UDP → Middleware Chain → Route Handler → DB/Redis (tenant-scoped)
+                                        → Static File Handler → Per-tenant frontend (Swoole sendfile)
                                         → Push to WS rooms (Redis Pub/Sub)
                                         → Dispatch job (Redis Streams)
                                         → Emit event (Redis Streams)
+                                        → Frontend Builder (git clone → npm build → deploy)
                                         → WebRTC signaling / HLS serving (fabriq/streaming)
                                         → Game room tick / state sync (fabriq/gaming)
 ```
@@ -30,7 +34,7 @@ These packages are always active and form the foundation of every Fabriq applica
 | **Kernel** | `packages/kernel/` | Swoole server bootstrap, Context (coroutine-local), Config, Container, Application, ServiceProvider |
 | **Tenancy** | `packages/tenancy/` | TenantResolver, TenantContext, TenantConfigCache |
 | **Storage** | `packages/storage/` | Connection pools (Channel-based), DbManager, TenantAwareRepository |
-| **HTTP** | `packages/http/` | Router, Request/Response wrappers, MiddlewareChain, Validator |
+| **HTTP** | `packages/http/` | Router, Request/Response wrappers, MiddlewareChain, Validator, StaticFileMiddleware, FrontendBuilder (CI/CD) |
 | **Realtime** | `packages/realtime/` | Gateway (fd mapping), Presence, PushService, RealtimeSubscriber |
 | **Queue** | `packages/queue/` | Dispatcher, Consumer (retry/DLQ), Scheduler, IdempotencyStore |
 | **Events** | `packages/events/` | EventBus, EventConsumer (dedupe), EventSchema |
@@ -61,9 +65,13 @@ These packages are **disabled by default** and installed separately. Enable them
 | `app/Jobs/` | Queued job classes |
 | `app/Realtime/` | WebSocket message handlers |
 | `app/Streaming/` | Stream controllers and custom streaming logic |
+| `public/` | Frontend build output, per-tenant subdirectories |
+| `public/_default/` | Default frontend (login page, marketing site) |
+| `public/{tenant-slug}/` | Tenant-specific frontend builds |
+| `storage/builds/` | Build workspace (git clone + npm build temp files) |
 | `routes/api.php` | HTTP API route definitions |
 | `routes/channels.php` | WebSocket channel definitions |
-| `config/` | Individual config files (app, server, database, redis, auth, streaming, gaming, etc.) |
+| `config/` | Individual config files (app, server, database, redis, auth, static, streaming, gaming, etc.) |
 | `bootstrap/app.php` | Application bootstrap (creates app, registers providers) |
 
 ### Config Files
@@ -79,6 +87,7 @@ These packages are **disabled by default** and installed separately. Enable them
 | `config/queue.php` | Queue consumer group + retry policy |
 | `config/events.php` | Event consumer group |
 | `config/observability.php` | Log level |
+| `config/static.php` | Frontend static file serving, SPA fallback, build automation |
 | `config/streaming.php` | Live streaming — FFmpeg path, HLS settings, chat moderation |
 | `config/gaming.php` | Game server — tick rates, matchmaking, UDP, reconnection |
 
@@ -223,10 +232,27 @@ curl http://localhost:8000/health
 | `bin/fabriq serve` | Start HTTP + WS + UDP server (with streaming & gaming if enabled) |
 | `bin/fabriq processor` | Start queue/event processor |
 | `bin/fabriq scheduler` | Start job scheduler |
+| `bin/fabriq frontend:build <slug>` | Build & deploy a tenant's frontend from their Git repo |
+| `bin/fabriq frontend:status <slug>` | Show frontend deployment status for a tenant |
 
 ---
 
 ## Key Features
+
+### Frontend Serving & Build Automation *(built-in)*
+
+Fabriq serves per-tenant frontend builds directly through Swoole — no Nginx or Apache required. Use any frontend framework (React, Vue, Svelte, Angular, Next.js, etc.) and Fabriq handles the rest.
+
+- **Per-tenant builds** — Each tenant gets their own frontend at `public/{tenant-slug}/`, resolved automatically from subdomain, header, or JWT
+- **SPA fallback** — Client-side routing works out of the box (`index.html` served for unmatched paths)
+- **Zero-copy file serving** — Uses Swoole's `sendfile()` for high-performance static delivery
+- **Smart caching** — Fingerprinted assets get immutable/1-year cache; HTML gets no-cache
+- **Built-in CI/CD** — Clone a tenant's Git repo, run `npm build`, deploy atomically with zero downtime
+- **Three trigger methods** — CLI (`frontend:build`), API (`POST /api/tenants/{id}/frontend/deploy`), webhook (GitHub/GitLab push)
+- **Atomic deployments** — Old build is swapped out atomically; users never see a half-built state
+- **Fallback directory** — `public/_default/` serves as the shared frontend when a tenant has no custom build
+
+> See [FRONTEND.md](docs/FRONTEND.md) for the full guide.
 
 ### `fabriq/streaming` — Live Streaming *(add-on package)*
 
@@ -305,6 +331,7 @@ vendor/bin/phpunit
 |-----|-------------|
 | [DEVELOPERS_GUIDE.md](docs/DEVELOPERS_GUIDE.md) | Comprehensive developer guide covering all subsystems |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System overview with component diagrams |
+| [FRONTEND.md](docs/FRONTEND.md) | Frontend serving, per-tenant builds, CI/CD pipeline |
 | [TENANCY.md](docs/TENANCY.md) | Tenant resolution, enforcement, config caching |
 | [DATABASE.md](docs/DATABASE.md) | Connection pooling, transactions, tenancy strategy |
 | [REALTIME_FABRIC.md](docs/REALTIME_FABRIC.md) | WS gateway, push API, cross-worker routing |

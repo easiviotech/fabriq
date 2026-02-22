@@ -4,6 +4,7 @@
 
 Fabriq is a unified Swoole runtime that consolidates:
 - **HTTP API server** (REST endpoints)
+- **Frontend static file serving** (per-tenant builds from any framework, SPA fallback, built-in CI/CD)
 - **WebSocket gateway** (realtime push/presence)
 - **Queue processor** (Redis Streams)
 - **Event consumers** (publish/subscribe with dedupe)
@@ -28,6 +29,11 @@ graph TD
         TenantRouter --> DB["DbManager"]
         Handlers --> EventBus["EventBus"]
         Handlers --> Push["PushService"]
+        StaticFiles["StaticFileMiddleware"] --> TenantResolve["TenantResolver"]
+        StaticFiles --> SendFile["sendfile() per-tenant"]
+        FrontendBuild["FrontendBuilder"] --> GitClone["git clone/pull"]
+        FrontendBuild --> NpmBuild["npm build"]
+        FrontendBuild --> AtomicDeploy["Atomic deploy to public/"]
         Signaling["SignalingHandler"] --> Push
         Transcode["TranscodingPipeline"] --> FFmpeg["FFmpeg Process"]
         HLS["HlsManager"] --> Router
@@ -99,6 +105,8 @@ Every execution path requires TenantContext:
 | WebSocket | WsAuthHandler (JWT token) |
 | Queue Job | Context restored from job fields |
 | Event Consumer | Context restored from event fields |
+| Frontend Serving | StaticFileMiddleware resolves tenant slug; each tenant's build lives in `public/{slug}/` |
+| Frontend Builder | FrontendBuilder clones/builds per tenant; output deploys to `public/{slug}/` |
 | Live Streaming | StreamManager carries `tenant_id`; signaling/chat messages are tenant-scoped |
 | Game Server | GameRoom and Matchmaker carry `tenant_id`; UDP packets include room context |
 | ORM Models | `HasTenantScope` trait auto-injects `tenant_id` in all queries and inserts |

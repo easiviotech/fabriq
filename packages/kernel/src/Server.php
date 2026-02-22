@@ -250,13 +250,6 @@ final class Server
         });
 
         $this->swoole->on('Request', function (Request $request, Response $response) {
-            // Skip WebSocket upgrade requests — Swoole handles those
-            if ($request->server['request_uri'] === '/favicon.ico') {
-                $response->status(404);
-                $response->end();
-                return;
-            }
-
             // Reset context for every HTTP request
             Context::reset();
 

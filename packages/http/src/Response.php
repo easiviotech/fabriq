@@ -106,6 +106,24 @@ final class Response
     }
 
     /**
+     * Send a file response using Swoole's zero-copy sendfile.
+     *
+     * @param string $filePath Absolute path to the file
+     * @param string $contentType MIME content type
+     */
+    public function sendFile(string $filePath, string $contentType, int $statusCode = 200): void
+    {
+        if ($this->sent) {
+            return;
+        }
+        $this->sent = true;
+
+        $this->swoole->status($statusCode);
+        $this->swoole->header('Content-Type', $contentType);
+        $this->swoole->sendfile($filePath);
+    }
+
+    /**
      * Check if the response has already been sent.
      */
     public function isSent(): bool

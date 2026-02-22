@@ -1,8 +1,8 @@
 # Fabriq — Developer's Guide
 
-> Build multi-tenant, real-time backend applications on a unified Swoole runtime.
+> Build multi-tenant, full-stack applications on a unified Swoole runtime — API, frontend, realtime, and background processing in one process.
 
-This guide walks you through building a production backend on Fabriq. By the end you will know how to create a project, define routes, add middleware, work with tenancy, push real-time messages, dispatch background jobs, emit events, and observe your application — all within a single long-running PHP process.
+This guide walks you through building a production application on Fabriq. By the end you will know how to create a project, define routes, serve per-tenant frontends, add middleware, work with tenancy, push real-time messages, dispatch background jobs, emit events, and observe your application — all within a single long-running PHP process.
 
 ---
 
@@ -29,9 +29,10 @@ This guide walks you through building a production backend on Fabriq. By the end
 18. [Context — The Coroutine-Local Bag](#18-context--the-coroutine-local-bag)
 19. [Live Streaming](#19-live-streaming)
 20. [Game Server](#20-game-server)
-21. [Testing](#21-testing)
-22. [Deployment](#22-deployment)
-23. [Full Example — Building a Todo API](#23-full-example--building-a-todo-api)
+21. [Frontend Serving & Build Automation](#21-frontend-serving--build-automation)
+22. [Testing](#22-testing)
+23. [Deployment](#23-deployment)
+24. [Full Example — Building a Todo API](#24-full-example--building-a-todo-api)
 
 ---
 
@@ -41,11 +42,12 @@ The [Swoole ecosystem](https://github.com/swoole/awesome-swoole) has many excell
 
 ### Unified Runtime — Not Just an HTTP Framework
 
-Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships **four core workloads in a single process** out of the box, with optional add-on packages for specialized use cases:
+Most Swoole frameworks focus primarily on HTTP. WebSocket, queues, and events are add-on packages you wire together yourself. Fabriq ships **five core workloads in a single process** out of the box, with optional add-on packages for specialized use cases:
 
 | Workload | Type | How It Works in Fabriq |
 |---|---|---|
 | **HTTP API** | Core | Middleware chain → Router → Controllers |
+| **Frontend Serving** | Core | Per-tenant static file serving via `sendfile()`, SPA fallback, built-in CI/CD from Git |
 | **WebSocket Gateway** | Core | Same port, JWT auth on upgrade, rooms, presence, cross-worker push via Redis Pub/Sub |
 | **Background Jobs** | Core | Redis Streams, consumer groups, retry with backoff, dead-letter queue |
 | **Event Bus** | Core | Redis Streams, publish/subscribe, built-in deduplication |
@@ -140,11 +142,13 @@ Unlike Hyperf (Spring Boot / Java annotations), Swoft (annotation-heavy), or Mix
 | Connection pool safety | Basic | Via Swoole | Basic | **✅ Health + idle + tenant** |
 | Laravel-style DX | ❌ (Spring-like) | ✅ (is Laravel) | ❌ | **✅** |
 | Single unified runtime | Partial | ❌ (FPM bridge) | Partial | **✅** |
+| Per-tenant frontend serving | ❌ | ❌ | ❌ | **✅ Built-in** (SPA fallback, sendfile) |
+| Frontend CI/CD from Git | ❌ | ❌ | ❌ | **✅ Built-in** (CLI, API, webhook) |
 | Live Streaming (WebRTC + HLS) | ❌ | ❌ | ❌ | **✅ Add-on** (`fabriq/streaming`) |
 | Game Server (tick loop + matchmaking) | ❌ | ❌ | ❌ | **✅ Add-on** (`fabriq/gaming`) |
 | UDP Protocol (MessagePack) | ❌ | ❌ | ❌ | **✅ Add-on** (`fabriq/gaming`) |
 
-**In short:** Fabriq is the only Swoole platform that ships multi-tenancy, realtime, queues, events, idempotency, RBAC+ABAC, and **a custom ORM with per-tenant DB routing and stored procedures** as a **unified, coherent system** — with optional add-on packages for **live streaming** and a **game server engine**, all with a Laravel-familiar developer experience.
+**In short:** Fabriq is the only Swoole platform that ships multi-tenancy, per-tenant frontend serving with CI/CD, realtime, queues, events, idempotency, RBAC+ABAC, and **a custom ORM with per-tenant DB routing and stored procedures** as a **unified, coherent system** — with optional add-on packages for **live streaming** and a **game server engine**, all with a Laravel-familiar developer experience.
 
 ---
 
@@ -431,9 +435,11 @@ php bin/fabriq scheduler
 
 | Command | Description |
 |---|---|
-| `php bin/fabriq serve [config]` | Start HTTP + WebSocket server |
+| `php bin/fabriq serve [config]` | Start HTTP + WebSocket server (with frontend serving if enabled) |
 | `php bin/fabriq processor [config]` | Start queue/event processor |
 | `php bin/fabriq scheduler [config]` | Start the cron-like job scheduler |
+| `php bin/fabriq frontend:build <slug>` | Build & deploy a tenant's frontend from Git |
+| `php bin/fabriq frontend:status <slug>` | Show frontend deployment status |
 | `php bin/fabriq help` | Show help |
 
 Configuration is loaded automatically from the `config/` directory. Each file (e.g. `config/server.php`, `config/database.php`) returns an array and is accessible via dot notation.
@@ -493,6 +499,11 @@ myapp/
 │   ├── observability/             # Logger, MetricsCollector, TraceContext
 │   ├── streaming/                 # StreamManager, Signaling, HLS, Transcoding
 │   └── gaming/                    # GameLoop, Rooms, Matchmaker, UDP Protocol
+├── public/                        # Frontend builds
+│   ├── _default/                  # Default frontend (login, marketing)
+│   └── {tenant-slug}/             # Per-tenant frontend builds
+├── storage/
+│   └── builds/                    # Build workspace (git clone + npm build)
 ├── tests/
 ├── composer.json
 └── phpunit.xml
@@ -530,6 +541,7 @@ Configuration in Fabriq follows a convention familiar to Laravel developers: eac
 | `config/queue.php` | `queue.*` | Queue consumer group + retry policy |
 | `config/events.php` | `events.*` | Event consumer group |
 | `config/observability.php` | `observability.*` | Log level |
+| `config/static.php` | `static.*` | Frontend serving, SPA fallback, build automation |
 | `config/streaming.php` | `streaming.*` | FFmpeg, HLS, chat moderation |
 | `config/gaming.php` | `gaming.*` | Tick rates, matchmaking, UDP protocol |
 
@@ -2194,7 +2206,128 @@ Register in `config/app.php`:
 
 ---
 
-## 21. Testing
+## 21. Frontend Serving & Build Automation
+
+Fabriq serves per-tenant frontend builds directly through Swoole — no Nginx or Apache required. Use any framework that produces static output (React, Vue, Svelte, Angular, Next.js, etc.).
+
+> **Full documentation:** [FRONTEND.md](FRONTEND.md)
+
+### Enabling Frontend Serving
+
+Set `'enabled' => true` in `config/static.php`:
+
+```php
+// config/static.php
+return [
+    'enabled'            => true,
+    'document_root'      => 'public',
+    'multi_tenancy'      => true,
+    'default_tenant_dir' => '_default',
+    'spa_fallback'       => true,
+    'index'              => 'index.html',
+    'api_prefixes'       => ['/api', '/health', '/metrics'],
+    'cache_max_age'      => 86400,
+    'cors'               => false,
+    'build' => [
+        'workspace'       => 'storage/builds',
+        'default_command' => 'npm install && npm run build',
+        'default_output'  => 'dist',
+        'webhook_secret'  => '',
+        'timeout'         => 300,
+    ],
+];
+```
+
+Once enabled, the `StaticFileMiddleware` is automatically registered as the last route handler — API routes always take priority.
+
+### How Requests Are Routed
+
+```
+                                    ┌─────── /api/*, /health, /metrics ────── API Handlers
+                                    │
+Incoming Request ─── Middleware ────┤
+                                    │
+                                    └─────── Everything else ────── StaticFileMiddleware
+                                                                     ├── public/{slug}/path
+                                                                     ├── public/_default/path
+                                                                     └── SPA fallback → index.html
+```
+
+API prefixes configured in `static.api_prefixes` are never touched by the static handler.
+
+### Per-Tenant Frontends
+
+Each tenant's frontend lives in `public/{tenant-slug}/`:
+
+```
+public/
+├── _default/         # Fallback (login page, marketing site)
+│   ├── index.html
+│   └── assets/...
+├── acme/             # Tenant "acme"
+│   ├── index.html
+│   └── assets/...
+└── globex/           # Tenant "globex"
+    ├── index.html
+    └── assets/...
+```
+
+The tenant is resolved from the incoming request using the same `TenantResolver` chain (subdomain, `X-Tenant` header, JWT). If resolution fails or the tenant has no dedicated build, the `_default/` directory is served.
+
+### Build Automation
+
+Tenants store their frontend Git repository in the `config` JSON field:
+
+```json
+{
+  "frontend": {
+    "repository": "https://github.com/acme-corp/dashboard.git",
+    "branch": "main",
+    "build_command": "npm install && npm run build",
+    "output_dir": "dist"
+  }
+}
+```
+
+Trigger a build via CLI, API, or webhook:
+
+```bash
+# CLI (synchronous, useful for debugging)
+php bin/fabriq frontend:build acme
+
+# API (async, dispatches to queue)
+curl -X POST https://api.yourapp.com/api/tenants/{id}/frontend/deploy \
+  -H "Authorization: Bearer <token>"
+
+# Webhook (called by GitHub/GitLab on push)
+curl -X POST https://api.yourapp.com/api/webhooks/frontend/deploy \
+  -H "X-Webhook-Secret: my-secret" \
+  -d '{"tenant_slug": "acme"}'
+```
+
+The build pipeline: clone → build → atomic deploy (zero-downtime directory swap).
+
+### Caching
+
+| File Type | Cache-Control |
+|-----------|--------------|
+| HTML | `no-cache` |
+| Fingerprinted assets (`app.a1b2c3.js`) | `public, max-age=31536000, immutable` |
+| Other assets | `public, max-age=86400` (configurable) |
+
+### Key Classes
+
+| Class | Import | Purpose |
+|---|---|---|
+| `StaticFileMiddleware` | `Fabriq\Http\Middleware\StaticFileMiddleware` | Serves static files with tenant resolution + caching |
+| `FrontendBuilder` | `Fabriq\Http\Frontend\FrontendBuilder` | Git clone → build → atomic deploy pipeline |
+| `BuildFrontendJob` | `Fabriq\Http\Frontend\BuildFrontendJob` | Async queue job wrapper for builds |
+| `BuildResult` | `Fabriq\Http\Frontend\BuildResult` | Immutable value object for build status |
+| `FrontendDeployController` | `App\Http\Controllers\FrontendDeployController` | API endpoints for deploy, status, webhook |
+
+---
+
+## 22. Testing
 
 ### Running Tests
 
@@ -2257,7 +2390,7 @@ final class ValidationTest extends TestCase
 
 ---
 
-## 22. Deployment
+## 23. Deployment
 
 ### Docker Deployment
 
@@ -2334,7 +2467,7 @@ return [
 
 ---
 
-## 23. Full Example — Building a Todo API
+## 24. Full Example — Building a Todo API
 
 Let's build a complete tenant-scoped Todo API from scratch.
 
@@ -2660,6 +2793,9 @@ curl -X DELETE http://localhost:8000/api/todos/<id> \
 | `Presence` | `Fabriq\Realtime\Presence` | Online user tracking |
 | `Logger` | `Fabriq\Observability\Logger` | Structured JSON logging |
 | `MetricsCollector` | `Fabriq\Observability\MetricsCollector` | Prometheus metrics |
+| `StaticFileMiddleware` | `Fabriq\Http\Middleware\StaticFileMiddleware` | Per-tenant static file serving with SPA fallback |
+| `FrontendBuilder` | `Fabriq\Http\Frontend\FrontendBuilder` | Git clone → build → atomic deploy pipeline |
+| `BuildResult` | `Fabriq\Http\Frontend\BuildResult` | Immutable build status value object |
 | `StreamManager` | `Fabriq\Streaming\StreamManager` | Live stream lifecycle management |
 | `SignalingHandler` | `Fabriq\Streaming\SignalingHandler` | WebRTC SDP/ICE signaling via WebSocket |
 | `TranscodingPipeline` | `Fabriq\Streaming\TranscodingPipeline` | FFmpeg RTMP→HLS transcoding |

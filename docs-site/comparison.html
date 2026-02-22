@@ -20,7 +20,7 @@
     <div id="docs-content-inner" class="docs-content">
 
         <h1>Why Fabriq?</h1>
-        <p>The <a href="https://github.com/swoole/awesome-swoole" target="_blank" rel="noopener">Swoole ecosystem</a> has many excellent projects &mdash; from general-purpose frameworks like Hyperf and Swoft to single-purpose libraries for connection pools, MQTT, and gRPC. Fabriq sits in a unique position: a <strong>unified, multi-tenant backend platform</strong> with a Laravel-familiar developer experience. Optional add-on packages extend the platform with <a href="streaming.html">live streaming</a> and <a href="gaming.html">game server</a> capabilities.</p>
+        <p>The <a href="https://github.com/swoole/awesome-swoole" target="_blank" rel="noopener">Swoole ecosystem</a> has many excellent projects &mdash; from general-purpose frameworks like Hyperf and Swoft to single-purpose libraries for connection pools, MQTT, and gRPC. Fabriq sits in a unique position: a <strong>unified, multi-tenant application platform</strong> that serves both APIs and per-tenant frontends with a Laravel-familiar developer experience. Optional add-on packages extend the platform with <a href="streaming.html">live streaming</a> and <a href="gaming.html">game server</a> capabilities.</p>
 
         <!-- ── Unified Runtime ──────────────────────────────────────── -->
         <h2 id="unified-runtime">Unified Runtime &mdash; Not Just an HTTP Framework</h2>
@@ -321,6 +321,27 @@ $result = $store->once(
                     <td><strong>&check;</strong></td>
                 </tr>
                 <tr>
+                    <td>Per-tenant frontend serving</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; StaticFileMiddleware</strong></td>
+                </tr>
+                <tr>
+                    <td>Frontend build automation (CI/CD)</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; FrontendBuilder</strong></td>
+                </tr>
+                <tr>
+                    <td>Custom domain resolution</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td>&cross;</td>
+                    <td><strong>&check; 3-tier strategy</strong></td>
+                </tr>
+                <tr>
                     <td>Live Streaming (WebRTC + HLS)</td>
                     <td>&cross;</td>
                     <td>&cross;</td>
@@ -347,7 +368,7 @@ $result = $store->once(
         <!-- ── Summary ─────────────────────────────────────────────────── -->
         <h2 id="summary">Summary</h2>
 
-        <p>Fabriq is the only Swoole platform that ships <strong>multi-tenancy, a custom ORM with per-tenant DB routing and stored procedures, realtime, queues, events, idempotency, and RBAC+ABAC as a unified, coherent system</strong> &mdash; with a Laravel-familiar developer experience. Optional add-on packages for <strong><a href="streaming.html">live streaming</a></strong> (<code>fabriq/streaming</code>) and a <strong><a href="gaming.html">game server engine</a></strong> (<code>fabriq/gaming</code>) extend the platform when needed.</p>
+        <p>Fabriq is the only Swoole platform that ships <strong>multi-tenancy, per-tenant frontend serving with built-in CI/CD, a custom ORM with per-tenant DB routing and stored procedures, realtime, queues, events, idempotency, and RBAC+ABAC as a unified, coherent system</strong> &mdash; with a Laravel-familiar developer experience. Optional add-on packages for <strong><a href="streaming.html">live streaming</a></strong> (<code>fabriq/streaming</code>) and a <strong><a href="gaming.html">game server engine</a></strong> (<code>fabriq/gaming</code>) extend the platform when needed.</p>
 
         <p>Everything else in the ecosystem requires you to glue together separate packages and handle tenant isolation, cross-worker routing, and idempotency yourself &mdash; let alone streaming or game server infrastructure.</p>
 

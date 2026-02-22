@@ -20,7 +20,7 @@
     <div id="docs-content-inner" class="docs-content">
 
         <h1>HTTP Routing</h1>
-        <p>Fabriq provides a fast, lightweight HTTP layer with routing, request/response wrappers, a middleware pipeline, and declarative validation &mdash; all running on the Swoole event loop.</p>
+        <p>Fabriq provides a fast, lightweight HTTP layer with routing, request/response wrappers, a middleware pipeline, declarative validation, and static file serving &mdash; all running on the Swoole event loop.</p>
 
         <!-- ── Defining Routes ─────────────────────────────────────── -->
         <h2 id="defining-routes">Defining Routes</h2>
@@ -163,7 +163,10 @@ $response->json($data);
 // Check if already sent (prevents double-send)
 if (!$response->isSent()) {
     $response->json($data);
-}</code></pre>
+}
+
+// Serve a static file (used by StaticFileMiddleware)
+$response->sendFile('/path/to/file.js', 'application/javascript');</code></pre>
 
         <!-- ── Middleware ──────────────────────────────────────────── -->
         <h2 id="middleware">Middleware</h2>
@@ -227,6 +230,7 @@ Response ← Logging ← Correlation ← Auth ← Tenancy ← Route Handler</cod
                 <tr><td><code>TenancyMiddleware</code></td><td>Resolves tenant from request (host, header, or token), sets <code>tenant_id</code> on Context</td></tr>
                 <tr><td><code>PolicyMiddleware</code></td><td>Enforces RBAC + ABAC policies for protected routes</td></tr>
                 <tr><td><code>RateLimitMiddleware</code></td><td>Redis-based sliding-window rate limiting, returns <code>429</code> when exceeded</td></tr>
+                <tr><td><code>StaticFileMiddleware</code></td><td>Serves per-tenant frontend builds with SPA fallback, custom domain resolution, and smart caching. Registered as last handler. See <a href="frontend.html">Frontend Serving</a>.</td></tr>
             </tbody>
         </table>
 

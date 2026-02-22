@@ -42,6 +42,7 @@
                 <tr><td><code>config/queue.php</code></td><td><code>queue.*</code></td><td>Queue consumer group + retry policy</td></tr>
                 <tr><td><code>config/events.php</code></td><td><code>events.*</code></td><td>Event consumer group</td></tr>
                 <tr><td><code>config/observability.php</code></td><td><code>observability.*</code></td><td>Log level</td></tr>
+                <tr><td><code>config/static.php</code></td><td><code>static.*</code></td><td>Frontend serving, SPA fallback, build automation, domain map</td></tr>
                 <tr><td><code>config/streaming.php</code></td><td><code>streaming.*</code></td><td>Live streaming (FFmpeg, HLS, chat moderation)</td></tr>
                 <tr><td><code>config/gaming.php</code></td><td><code>gaming.*</code></td><td>Game server (tick rates, matchmaking, UDP)</td></tr>
             </tbody>
@@ -177,6 +178,30 @@ return [
             'borrow_timeout' =&gt; 3.0,
             'idle_timeout'   =&gt; 120.0,
         ],
+    ],
+];</code></pre>
+
+        <h3>config/static.php</h3>
+        <pre><code class="language-php">&lt;?php
+declare(strict_types=1);
+
+return [
+    'enabled'            => false,
+    'document_root'      => 'public',
+    'multi_tenancy'      => true,
+    'default_tenant_dir' => '_default',
+    'spa_fallback'       => true,
+    'index'              => 'index.html',
+    'api_prefixes'       => ['/api', '/health', '/metrics'],
+    'cache_max_age'      => 86400,
+    'cors'               => false,
+    'domain_map'         => [],
+    'build' => [
+        'workspace'       => 'storage/builds',
+        'default_command' => 'npm install &amp;&amp; npm run build',
+        'default_output'  => 'dist',
+        'webhook_secret'  => '',
+        'timeout'         => 300,
     ],
 ];</code></pre>
 

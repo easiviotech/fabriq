@@ -130,20 +130,120 @@ switch ($command) {
         });
         break;
 
+    case 'frontend:build':
+        $tenantSlug = $argv[2] ?? '';
+        if ($tenantSlug === '') {
+            echo "Usage: php bin/fabriq frontend:build <tenant-slug>\n";
+            exit(1);
+        }
+
+        echo "╔══════════════════════════════════════╗\n";
+        echo "║              Fabriq                  ║\n";
+        echo "║        Frontend Builder              ║\n";
+        echo "╚══════════════════════════════════════╝\n\n";
+
+        \Swoole\Runtime::enableCoroutine(SWOOLE_HOOK_ALL);
+
+        $basePath = dirname(__DIR__);
+        $config = Config::fromDirectory($basePath . '/config');
+
+        \Swoole\Coroutine\run(function () use ($config, $basePath, $tenantSlug) {
+            $dbManager = new DbManager();
+            $dbManager->boot($config);
+
+            // Look up tenant by slug
+            $tenant = null;
+            try {
+                $pdo = $dbManager->platform();
+                $stmt = $pdo->prepare('SELECT * FROM tenants WHERE slug = ? LIMIT 1');
+                $stmt->execute([$tenantSlug]);
+                $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+                $dbManager->releasePlatform($pdo);
+
+                if (!$row) {
+                    echo "[error] Tenant '{$tenantSlug}' not found\n";
+                    return;
+                }
+
+                $tenant = \Fabriq\Tenancy\TenantContext::fromArray($row);
+            } catch (\Throwable $e) {
+                echo "[error] Failed to look up tenant: {$e->getMessage()}\n";
+                return;
+            }
+
+            $builder = new \Fabriq\Http\Frontend\FrontendBuilder($config, $basePath);
+            echo "[info] Starting build for tenant '{$tenantSlug}'...\n\n";
+
+            $result = $builder->build($tenant);
+
+            echo "\n";
+            echo "Status:      {$result->status}\n";
+            echo "Commit:      {$result->commitHash}\n";
+            echo "Duration:    " . round($result->durationMs) . "ms\n";
+            echo "Timestamp:   {$result->timestamp}\n";
+
+            if ($result->status !== 'success') {
+                echo "\n--- Build Log ---\n";
+                echo $result->log . "\n";
+                exit(1);
+            }
+
+            echo "\nFrontend deployed to public/{$tenantSlug}/\n";
+        });
+        break;
+
+    case 'frontend:status':
+        $tenantSlug = $argv[2] ?? '';
+        if ($tenantSlug === '') {
+            echo "Usage: php bin/fabriq frontend:status <tenant-slug>\n";
+            exit(1);
+        }
+
+        $basePath = dirname(__DIR__);
+        $config = Config::fromDirectory($basePath . '/config');
+        $docRoot = (string) $config->get('static.document_root', 'public');
+        $publicDir = $basePath . '/' . $docRoot . '/' . $tenantSlug;
+
+        echo "Tenant:       {$tenantSlug}\n";
+        echo "Deploy path:  {$publicDir}\n";
+
+        if (is_dir($publicDir)) {
+            $indexFile = (string) $config->get('static.index', 'index.html');
+            $hasIndex = is_file($publicDir . '/' . $indexFile);
+            echo "Status:       deployed\n";
+            echo "Has index:    " . ($hasIndex ? 'yes' : 'no') . "\n";
+
+            $files = 0;
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($publicDir, \FilesystemIterator::SKIP_DOTS),
+            );
+            foreach ($iterator as $_) {
+                $files++;
+            }
+            echo "Total files:  {$files}\n";
+        } else {
+            echo "Status:       not deployed (directory does not exist)\n";
+        }
+        break;
+
     case 'help':
     default:
         echo "Fabriq CLI\n\n";
         echo "Usage:\n";
         echo "  php bin/fabriq <command>\n\n";
         echo "Commands:\n";
-        echo "  serve       Start HTTP + WebSocket server\n";
-        echo "  processor   Start queue/event processor\n";
-        echo "  scheduler   Start cron-like scheduler\n";
-        echo "  help        Show this help message\n\n";
+        echo "  serve                          Start HTTP + WebSocket server\n";
+        echo "  processor                      Start queue/event processor\n";
+        echo "  scheduler                      Start cron-like scheduler\n";
+        echo "  frontend:build <tenant-slug>   Build & deploy tenant frontend from Git repo\n";
+        echo "  frontend:status <tenant-slug>  Show frontend deployment status\n";
+        echo "  help                           Show this help message\n\n";
         echo "Examples:\n";
         echo "  php bin/fabriq serve\n";
         echo "  php bin/fabriq processor\n";
         echo "  php bin/fabriq scheduler\n";
+        echo "  php bin/fabriq frontend:build acme\n";
+        echo "  php bin/fabriq frontend:status acme\n";
         break;
 }
 

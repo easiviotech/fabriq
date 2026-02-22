@@ -56,9 +56,11 @@
 
         <pre><code class="language-dockerfile">FROM php:8.3-cli
 
-# System dependencies (no git in production)
+# System dependencies
+# Include git, nodejs, npm if using frontend build automation
 RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev libssl-dev unzip \
+    git nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Swoole + PDO MySQL + Redis extensions
@@ -174,6 +176,9 @@ CMD ["php", "bin/fabriq", "serve"]</code></pre>
                 <tr><td><code>JWT_TTL</code></td><td>No</td><td><code>3600</code></td><td>JWT token TTL in seconds</td></tr>
                 <tr><td><code>SWOOLE_WORKERS</code></td><td>No</td><td>CPU count</td><td>Number of Swoole worker processes</td></tr>
                 <tr><td><code>SWOOLE_TASK_WORKERS</code></td><td>No</td><td><code>2</code></td><td>Number of task worker processes</td></tr>
+                <tr><td><code>STATIC_ENABLED</code></td><td>No</td><td><code>false</code></td><td>Enable frontend static file serving</td></tr>
+                <tr><td><code>STATIC_SPA_FALLBACK</code></td><td>No</td><td><code>true</code></td><td>Enable SPA fallback (index.html for unmatched paths)</td></tr>
+                <tr><td><code>BUILD_WEBHOOK_SECRET</code></td><td>No</td><td><em>(empty)</em></td><td>Webhook signature secret for frontend deploys</td></tr>
             </tbody>
         </table>
 
@@ -202,6 +207,9 @@ CMD ["php", "bin/fabriq", "serve"]</code></pre>
       restart_policy:
         condition: on-failure
         delay: 5s
+    volumes:
+      - frontend-builds:/app/public
+      - build-workspace:/app/storage/builds
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
@@ -244,7 +252,11 @@ CMD ["php", "bin/fabriq", "serve"]</code></pre>
 
 networks:
   sf-net:
-    driver: bridge</code></pre>
+    driver: bridge
+
+volumes:
+  frontend-builds:
+  build-workspace:</code></pre>
 
         <h3>Build &amp; Deploy</h3>
 
@@ -627,6 +639,16 @@ kubectl run fabriq-migrate --rm -it --restart=Never \
             <li>Prometheus scrapes <code>GET /metrics</code> endpoint</li>
             <li>Alerts configured for error rate, latency, pool exhaustion</li>
             <li>Distributed tracing via <code>X-Correlation-ID</code> / <code>traceparent</code> headers</li>
+        </ul>
+
+        <h3>Frontend Serving (if enabled)</h3>
+        <ul>
+            <li><code>STATIC_ENABLED=true</code> is set in production environment</li>
+            <li><code>public/</code> and <code>storage/builds/</code> are persistent volumes</li>
+            <li><code>BUILD_WEBHOOK_SECRET</code> is set if using webhook-triggered builds</li>
+            <li><code>git</code>, <code>nodejs</code>, and <code>npm</code> are installed in the Docker image (if using build automation)</li>
+            <li>Reverse proxy passes <code>Host</code> header for custom domain resolution</li>
+            <li>TLS certificates cover all tenant custom domains</li>
         </ul>
 
         <h3>CI/CD</h3>

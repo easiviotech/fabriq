@@ -114,6 +114,9 @@ $metrics->observe('query_duration_ms', 12.5);</code></pre>
                 <tr><td><code>game_tick_latency_ms</code></td><td>histogram</td><td>Game loop tick timing</td></tr>
                 <tr><td><code>udp_packets_total</code></td><td>counter</td><td>UDP packets processed</td></tr>
                 <tr><td><code>matchmaking_queue_size</code></td><td>gauge</td><td>Players waiting for match</td></tr>
+                <tr><td><code>frontend_builds_total</code></td><td>counter</td><td>Frontend builds triggered</td></tr>
+                <tr><td><code>frontend_build_duration_ms</code></td><td>histogram</td><td>Frontend build duration</td></tr>
+                <tr><td><code>static_files_served</code></td><td>counter</td><td>Static file requests served</td></tr>
             </tbody>
         </table>
 
@@ -220,6 +223,7 @@ final class ValidationTest extends TestCase
                 <tr><td>Streaming</td><td>Mock <code>StreamManager</code>, verify signaling flow, test HLS route responses</td></tr>
                 <tr><td>Game Server</td><td>Create <code>GameRoom</code> with mock tick handler, verify state changes after <code>tick()</code></td></tr>
                 <tr><td>Matchmaking</td><td>Mock Redis, queue players, verify match formation within rating range</td></tr>
+                <tr><td>Frontend Serving</td><td>Create temp <code>public/{slug}/</code> directories with test files, verify <code>StaticFileMiddleware</code> resolution</td></tr>
                 <tr><td>Integration</td><td>Use Docker Compose to start full stack, use <code>curl</code>/HTTP client</td></tr>
             </tbody>
         </table>

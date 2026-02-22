@@ -1,6 +1,6 @@
 # Fabriq — Production Deployment Guide
 
-> Deploy Fabriq as a set of Docker containers with external MySQL and Redis.
+> Deploy Fabriq as a set of Docker containers with external MySQL and Redis. Serves both API and per-tenant frontends from a single image.
 
 ---
 
@@ -42,14 +42,19 @@ Fabriq requires **three process types** running in production:
 
 ## Production Dockerfile
 
-The included `infra/Dockerfile` works for development. For production, apply these optimizations:
+The included `infra/Dockerfile` works for development. For production, apply these optimizations.
+
+> **Frontend Build Automation:** If you use Fabriq's built-in CI/CD to build frontends from Git repositories, include `git`, `nodejs`, and `npm` in your production image. If you only serve pre-built frontend files (e.g., built externally and copied in), these are not needed.
 
 ```dockerfile
 FROM php:8.3-cli
 
-# System dependencies (no git in production)
+# System dependencies
+# Add git + nodejs + npm if using frontend build automation
 RUN apt-get update && apt-get install -y \
-    libcurl4-openssl-dev libssl-dev unzip \
+    libcurl4-openssl-dev libssl-dev unzip git curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Swoole + PDO MySQL + Redis extensions
@@ -192,6 +197,11 @@ return [
 | `SWOOLE_WORKERS` | No | CPU count | Number of Swoole worker processes |
 | `SWOOLE_TASK_WORKERS` | No | `2` | Number of task worker processes |
 | `SWOOLE_LOG_LEVEL` | No | `4` | Swoole log level (4 = WARNING) |
+| `STATIC_ENABLED` | No | `false` | Enable per-tenant frontend static file serving |
+| `STATIC_DOCUMENT_ROOT` | No | `public` | Directory containing frontend builds |
+| `STATIC_SPA_FALLBACK` | No | `true` | Enable SPA fallback to index.html |
+| `STATIC_WEBHOOK_SECRET` | No | *(empty)* | Shared secret for frontend deploy webhook authentication |
+| `STATIC_BUILD_TIMEOUT` | No | `300` | Frontend build timeout in seconds |
 | `STREAMING_ENABLED` | No | `false` | Enable `fabriq/streaming` add-on (must be installed first) |
 | `GAMING_ENABLED` | No | `false` | Enable `fabriq/gaming` add-on (must be installed first) |
 
@@ -217,6 +227,11 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
       - SWOOLE_WORKERS=${SWOOLE_WORKERS:-8}
+      - STATIC_ENABLED=${STATIC_ENABLED:-false}
+      - STATIC_WEBHOOK_SECRET=${STATIC_WEBHOOK_SECRET:-}
+    volumes:
+      - frontend-data:/app/public
+      - build-workspace:/app/storage/builds
     deploy:
       replicas: 3
       restart_policy:
@@ -267,7 +282,13 @@ services:
 networks:
   sf-net:
     driver: bridge
+
+volumes:
+  frontend-data:
+  build-workspace:
 ```
+
+> **Note:** The `frontend-data` and `build-workspace` volumes persist per-tenant frontend builds across container restarts. If you don't use the frontend serving feature (`STATIC_ENABLED=false`), you can remove these volumes.
 
 > **Note:** This compose file assumes MySQL and Redis are managed externally (e.g., AWS RDS, ElastiCache). If you need to run them as containers, add `mysql` and `redis` services similar to the development `docker-compose.yml`.
 
@@ -310,6 +331,11 @@ JWT_TTL=3600
 # Swoole
 SWOOLE_WORKERS=8
 SWOOLE_TASK_WORKERS=4
+
+# Frontend Serving (optional)
+STATIC_ENABLED=true
+STATIC_WEBHOOK_SECRET=your-webhook-shared-secret
+STATIC_BUILD_TIMEOUT=300
 ```
 
 > **Never commit `.env.production` to Git.** Use your CI/CD platform's secret management (GitHub Secrets, AWS Parameter Store, HashiCorp Vault, etc.).
@@ -593,6 +619,14 @@ Redis default `maxclients` is 10,000 — usually sufficient. For ElastiCache, th
 - [ ] Prometheus scrapes `GET /metrics` endpoint
 - [ ] Alerts configured for error rate, latency, pool exhaustion
 - [ ] Distributed tracing via `X-Correlation-ID` / `traceparent` headers
+
+### Frontend Serving (if enabled)
+
+- [ ] `STATIC_ENABLED` is set to `true`
+- [ ] `STATIC_WEBHOOK_SECRET` is set to a strong random value (if using webhooks)
+- [ ] `public/` and `storage/builds/` directories are persisted via Docker volumes
+- [ ] Git and Node.js (npm) are available in the container if using build automation
+- [ ] Webhook endpoint is behind HTTPS (secrets are transmitted in headers)
 
 ### CI/CD
 

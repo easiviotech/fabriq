@@ -20,8 +20,12 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\FrontendDeployController;
 use App\Repositories\ChatRepository;
 use Fabriq\Security\JwtAuthenticator;
+use Fabriq\Http\Frontend\FrontendBuilder;
+use Fabriq\Queue\Dispatcher;
+use Fabriq\Kernel\Config;
 
 return function (Router $router, Container $container): void {
 
@@ -71,5 +75,25 @@ return function (Router $router, Container $container): void {
     */
     $router->post('/api/rooms/{roomId}/messages', [$messageController, 'store']);
     $router->get('/api/rooms/{roomId}/messages', [$messageController, 'index']);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Frontend Deploy Routes
+    |--------------------------------------------------------------------------
+    */
+    if ($container->has(FrontendBuilder::class)) {
+        /** @var FrontendBuilder $frontendBuilder */
+        $frontendBuilder = $container->make(FrontendBuilder::class);
+        /** @var Dispatcher $dispatcher */
+        $dispatcher = $container->make(Dispatcher::class);
+        /** @var Config $config */
+        $config = $container->make(Config::class);
+
+        $frontendController = new FrontendDeployController($dispatcher, $frontendBuilder, $repo, $config);
+
+        $router->post('/api/tenants/{tenantId}/frontend/deploy', [$frontendController, 'deploy']);
+        $router->get('/api/tenants/{tenantId}/frontend/status', [$frontendController, 'status']);
+        $router->post('/api/webhooks/frontend/deploy', [$frontendController, 'webhook']);
+    }
 };
 

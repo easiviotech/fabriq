@@ -20,15 +20,16 @@
     <div id="docs-content-inner" class="docs-content">
 
         <h1>Architecture</h1>
-        <p>Fabriq is a unified Swoole runtime that consolidates HTTP APIs, WebSocket gateway, queue processor, event consumers, live streaming, and a game server engine into a single deployable process.</p>
+        <p>Fabriq is a unified Swoole runtime that consolidates HTTP APIs, per-tenant frontend serving, WebSocket gateway, queue processor, event consumers, live streaming, and a game server engine into a single deployable process.</p>
 
         <!-- ── Overview ────────────────────────────────────────────── -->
         <h2 id="overview">Overview</h2>
 
-        <p>The platform hosts six workload types in a single server:</p>
+        <p>The platform hosts seven workload types in a single server:</p>
 
         <ul>
             <li><strong>HTTP API server</strong> &mdash; REST endpoints with middleware pipeline</li>
+            <li><strong>Frontend file server</strong> &mdash; per-tenant static file serving with SPA fallback and custom domain resolution</li>
             <li><strong>WebSocket gateway</strong> &mdash; realtime push and presence</li>
             <li><strong>Queue processor</strong> &mdash; Redis Streams with retry and DLQ</li>
             <li><strong>Event consumers</strong> &mdash; publish/subscribe with deduplication</li>
@@ -39,6 +40,7 @@
         <p>The high-level request flow:</p>
 
         <pre><code class="language-text">Client → HTTP/WS/UDP → Middleware Chain → Route Handler → DB/Redis (tenant-scoped)
+                                        → Static file serving (per-tenant frontend)
                                         → Push to WS rooms (Redis Pub/Sub)
                                         → Dispatch job (Redis Streams)
                                         → Emit event (Redis Streams)
@@ -53,6 +55,8 @@
         <pre><code class="language-text">┌─────────────────────── Swoole Server ───────────────────────┐
 │                                                              │
 │   HTTP Handler ──→ Middleware Chain ──→ Router ──→ Handlers  │
+│   Static Files ─→ StaticFileMiddleware (last handler)        │
+│   Frontend CI/CD → FrontendBuilder (atomic deploy)           │
 │   WS Handler ───→ Gateway                    │              │
 │   UDP Handler ──→ UdpProtocol                ├──→ DbManager │
 │                                              ├──→ ORM       │
@@ -106,6 +110,7 @@
                 <tr><td>Event Consumer</td><td>Context restored from event fields</td></tr>
                 <tr><td>Live Streaming</td><td>StreamManager carries <code>tenant_id</code>; signaling/chat messages are tenant-scoped</td></tr>
                 <tr><td>Game Server</td><td>GameRoom and Matchmaker carry <code>tenant_id</code>; UDP packets include room context</td></tr>
+                <tr><td>Frontend Serving</td><td>StaticFileMiddleware resolves tenant via domain_map, TenantResolver, or DB lookup; serves from <code>public/{tenant-slug}/</code></td></tr>
             </tbody>
         </table>
 
@@ -314,6 +319,11 @@ composer require fabriq/gaming</code></pre>
                 <tr><td><code>Gateway</code></td><td><code>Fabriq\Realtime\Gateway</code></td><td>WS connection management</td></tr>
                 <tr><td><code>PushService</code></td><td><code>Fabriq\Realtime\PushService</code></td><td>Push to WS clients</td></tr>
                 <tr><td><code>Logger</code></td><td><code>Fabriq\Observability\Logger</code></td><td>Structured JSON logging</td></tr>
+                <tr><td colspan="3" style="background:#f0f4f8;font-weight:bold;padding-top:10px;">Frontend Serving</td></tr>
+                <tr><td><code>StaticFileMiddleware</code></td><td><code>Fabriq\Http\Middleware\StaticFileMiddleware</code></td><td>Per-tenant static file serving with SPA fallback and custom domain resolution</td></tr>
+                <tr><td><code>FrontendBuilder</code></td><td><code>Fabriq\Http\Frontend\FrontendBuilder</code></td><td>Git clone/pull, build execution, atomic deployment</td></tr>
+                <tr><td><code>BuildResult</code></td><td><code>Fabriq\Http\Frontend\BuildResult</code></td><td>Immutable value object for build status</td></tr>
+                <tr><td><code>BuildFrontendJob</code></td><td><code>Fabriq\Http\Frontend\BuildFrontendJob</code></td><td>Async queue job for background builds</td></tr>
                 <tr><td colspan="3" style="background:#f0f4f8;font-weight:bold;padding-top:10px;">Add-on: <code>fabriq/streaming</code></td></tr>
                 <tr><td><code>SignalingHandler</code></td><td><code>Fabriq\Streaming\SignalingHandler</code></td><td>WebRTC SDP/ICE exchange over WebSocket</td></tr>
                 <tr><td><code>StreamManager</code></td><td><code>Fabriq\Streaming\StreamManager</code></td><td>Live stream lifecycle management</td></tr>

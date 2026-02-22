@@ -9,6 +9,8 @@ use Swoole\Http\Response;
 use Fabriq\Observability\MetricsCollector;
 use Fabriq\Observability\Logger;
 use Fabriq\Storage\DbManager;
+use Fabriq\Http\Middleware\StaticFileMiddleware;
+use Fabriq\Http\Frontend\FrontendBuilder;
 
 /**
  * Application bootstrap — the heart of Fabriq.
@@ -90,6 +92,7 @@ final class Application
         });
 
         $this->registerDefaultRoutes($metrics);
+        $this->registerStaticFileHandler();
         $this->wireRequestHandler($metrics);
     }
 
@@ -141,6 +144,23 @@ final class Application
     public function bootstrapPath(string $path = ''): string
     {
         return $this->basePath('bootstrap') . ($path !== '' ? DIRECTORY_SEPARATOR . ltrim($path, '/\\') : '');
+    }
+
+    /**
+     * Get the path to the public/ (frontend assets) directory.
+     */
+    public function publicPath(string $path = ''): string
+    {
+        $docRoot = $this->config->get('static.document_root', 'public');
+        return $this->basePath((string) $docRoot) . ($path !== '' ? DIRECTORY_SEPARATOR . ltrim($path, '/\\') : '');
+    }
+
+    /**
+     * Get the path to the storage/ directory.
+     */
+    public function storagePath(string $path = ''): string
+    {
+        return $this->basePath('storage') . ($path !== '' ? DIRECTORY_SEPARATOR . ltrim($path, '/\\') : '');
     }
 
     // ── Accessors ────────────────────────────────────────────────────
@@ -321,6 +341,55 @@ final class Application
             }
 
             return false;
+        });
+    }
+
+    private function registerStaticFileHandler(): void
+    {
+        if (!$this->config->get('static.enabled', false)) {
+            return;
+        }
+
+        $builder = new FrontendBuilder($this->config, $this->basePath);
+        $this->container->instance(FrontendBuilder::class, $builder);
+
+        $documentRoot = $this->publicPath();
+
+        $configArray = [];
+        foreach (['default_tenant_dir', 'spa_fallback', 'index', 'api_prefixes', 'cache_max_age', 'cors', 'multi_tenancy'] as $key) {
+            $value = $this->config->get('static.' . $key);
+            if ($value !== null) {
+                $configArray[$key] = $value;
+            }
+        }
+
+        $domainMap = $this->config->get('static.domain_map', []);
+        if (!is_array($domainMap)) {
+            $domainMap = [];
+        }
+
+        $container = $this->container;
+
+        // TenantResolver and DB pools are registered later by service providers,
+        // so both are resolved lazily inside the route handler closure.
+        $this->addRoute(function (Request $request, Response $response) use ($documentRoot, $configArray, $domainMap, $container): bool {
+            $resolver = null;
+            if ($container->has(\Fabriq\Tenancy\TenantResolver::class)) {
+                $resolver = $container->make(\Fabriq\Tenancy\TenantResolver::class);
+            }
+
+            // DB-backed domain lookup — queries tenants.domain column
+            $domainLookup = null;
+            if ($container->has(\App\Repositories\ChatRepository::class)) {
+                $repo = $container->make(\App\Repositories\ChatRepository::class);
+                $domainLookup = static function (string $domain) use ($repo): ?string {
+                    $tenant = $repo->findTenantByDomain($domain);
+                    return $tenant['slug'] ?? null;
+                };
+            }
+
+            $handler = new StaticFileMiddleware($documentRoot, $configArray, $resolver, $domainMap, $domainLookup);
+            return $handler($request, $response);
         });
     }
 

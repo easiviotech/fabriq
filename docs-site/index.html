@@ -24,7 +24,7 @@
     <div id="docs-content-inner" class="docs-content">
 
         <h1>Getting Started</h1>
-        <p>Fabriq is a unified Swoole-powered backend platform &mdash; HTTP APIs, WebSocket realtime, background jobs, event bus, live streaming, and game server with first-class multi-tenancy. Everything runs in a single long-running PHP process.</p>
+        <p>Fabriq is a unified Swoole-powered application platform &mdash; HTTP APIs, per-tenant frontend serving, WebSocket realtime, background jobs, event bus, live streaming, and game server with first-class multi-tenancy. Serve both your API and your frontend from a single Swoole process.</p>
 
         <!-- ── Prerequisites ───────────────────────────────────────── -->
         <h2 id="prerequisites">Prerequisites</h2>
@@ -334,6 +334,8 @@ php bin/fabriq scheduler</code></pre>
                 <tr><td><code>php bin/fabriq serve [config]</code></td><td>Start HTTP + WebSocket + UDP server (with streaming &amp; gaming if enabled)</td></tr>
                 <tr><td><code>php bin/fabriq processor [config]</code></td><td>Start queue/event processor</td></tr>
                 <tr><td><code>php bin/fabriq scheduler [config]</code></td><td>Start the cron-like job scheduler</td></tr>
+                <tr><td><code>php bin/fabriq frontend:build &lt;slug&gt;</code></td><td>Build &amp; deploy a tenant's frontend from their Git repo</td></tr>
+                <tr><td><code>php bin/fabriq frontend:status &lt;slug&gt;</code></td><td>Show frontend deployment status for a tenant</td></tr>
                 <tr><td><code>php bin/fabriq help</code></td><td>Show help</td></tr>
             </tbody>
         </table>
@@ -391,6 +393,7 @@ php bin/fabriq scheduler</code></pre>
 │   ├── queue.php                  # Queue consumer groups + retry
 │   ├── events.php                 # Event consumer groups
 │   ├── observability.php          # Log level
+│   ├── static.php                 # Frontend serving, SPA fallback, build automation
 │   ├── streaming.php              # Live streaming (FFmpeg, HLS, chat)
 │   └── gaming.php                 # Game server (tick rates, matchmaking)
 ├── routes/
@@ -415,6 +418,11 @@ php bin/fabriq scheduler</code></pre>
 │   ├── observability/             # Logger, MetricsCollector, TraceContext
 │   ├── streaming/                 # SignalingHandler, StreamManager, Transcoding, HLS
 │   └── gaming/                    # GameLoop, GameRoom, Matchmaker, UdpProtocol
+├── public/                        # Frontend builds (per-tenant)
+│   ├── _default/                  # Default frontend (login, marketing)
+│   └── {tenant-slug}/             # Tenant-specific builds
+├── storage/
+│   └── builds/                    # Build workspace (git clone + npm)
 ├── tests/
 ├── composer.json
 └── phpunit.xml</code></pre>
@@ -449,7 +457,7 @@ php bin/fabriq scheduler</code></pre>
                 <tr><td><strong>Tenancy</strong></td><td><code>packages/tenancy/</code></td><td>TenantResolver, TenantContext, TenantConfigCache</td></tr>
                 <tr><td><strong>Storage</strong></td><td><code>packages/storage/</code></td><td>Connection pools (Channel-based), DbManager, TenantAwareRepository</td></tr>
                 <tr><td><strong>ORM</strong></td><td><code>packages/orm/</code></td><td>DB facade, QueryBuilder, Model (Active Record), ProcedureCall, TenantDbRouter, Schema, MigrationRunner, Collection</td></tr>
-                <tr><td><strong>HTTP</strong></td><td><code>packages/http/</code></td><td>Router, Request/Response wrappers, MiddlewareChain, Validator</td></tr>
+                <tr><td><strong>HTTP</strong></td><td><code>packages/http/</code></td><td>Router, Request/Response wrappers, MiddlewareChain, Validator, StaticFileMiddleware, FrontendBuilder</td></tr>
                 <tr><td><strong>Realtime</strong></td><td><code>packages/realtime/</code></td><td>Gateway (fd mapping), Presence, PushService, RealtimeSubscriber</td></tr>
                 <tr><td><strong>Queue</strong></td><td><code>packages/queue/</code></td><td>Dispatcher, Consumer (retry/DLQ), Scheduler, IdempotencyStore</td></tr>
                 <tr><td><strong>Events</strong></td><td><code>packages/events/</code></td><td>EventBus, EventConsumer (dedupe), EventSchema</td></tr>
