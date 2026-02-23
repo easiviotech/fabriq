@@ -182,6 +182,29 @@ CMD ["php", "bin/fabriq", "serve"]</code></pre>
             </tbody>
         </table>
 
+        <!-- ── Development Docker Compose (.env) ────────────────────── -->
+        <h2 id="dev-compose">Development Docker Compose</h2>
+
+        <p>The development <code>infra/docker-compose.yml</code> uses an <code>infra/.env</code> file for project-specific settings. This lets you run <strong>multiple Fabriq projects side by side</strong> with no container, port, or volume conflicts:</p>
+
+        <pre><code class="language-bash"># infra/.env
+COMPOSE_PROJECT_NAME=fabriq
+APP_PORT=8000
+MYSQL_PORT=3306
+REDIS_PORT=6379
+ADMINER_PORT=8080</code></pre>
+
+        <p>Docker Compose reads <code>infra/.env</code> automatically and uses <code>COMPOSE_PROJECT_NAME</code> to namespace all containers, volumes, and networks. For a second project, copy the infra directory and adjust:</p>
+
+        <pre><code class="language-bash"># Second project's infra/.env
+COMPOSE_PROJECT_NAME=myapp
+APP_PORT=8001
+MYSQL_PORT=3307
+REDIS_PORT=6380
+ADMINER_PORT=8081</code></pre>
+
+        <p>Result: <code>fabriq-app-1</code> and <code>myapp-app-1</code> run independently on different ports with separate volumes.</p>
+
         <!-- ── Production Docker Compose ────────────────────────────── -->
         <h2 id="docker-compose">Production Docker Compose</h2>
 

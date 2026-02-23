@@ -1,11 +1,12 @@
+name: ${COMPOSE_PROJECT_NAME}
+
 services:
   app:
     build:
       context: ..
       dockerfile: infra/Dockerfile
-    container_name: fabriq-app
     ports:
-      - "8000:8000"
+      - "${APP_PORT}:8000"
     volumes:
       - ..:/app
       - vendor-data:/app/vendor
@@ -25,7 +26,6 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile
-    container_name: fabriq-processor
     volumes:
       - ..:/app
       - vendor-data:/app/vendor
@@ -46,7 +46,6 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile
-    container_name: fabriq-scheduler
     volumes:
       - ..:/app
       - vendor-data:/app/vendor
@@ -65,9 +64,8 @@ services:
 
   mysql:
     image: mysql:8.0
-    container_name: fabriq-mysql
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT}:3306"
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
       MYSQL_USER: fabriq
@@ -86,9 +84,8 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: fabriq-redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -99,9 +96,8 @@ services:
 
   adminer:
     image: adminer
-    container_name: fabriq-adminer
     ports:
-      - "8080:8080"
+      - "${ADMINER_PORT}:8080"
     depends_on:
       - mysql
     networks:

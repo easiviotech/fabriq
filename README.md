@@ -134,16 +134,29 @@ From the **project root**, run:
 docker compose -f infra/docker-compose.yml up -d --build
 ```
 
+Container names and ports are controlled by `infra/.env`:
+
+```env
+# infra/.env — customise per project
+COMPOSE_PROJECT_NAME=fabriq
+APP_PORT=8000
+MYSQL_PORT=3306
+REDIS_PORT=6379
+ADMINER_PORT=8080
+```
+
 This builds the app image (PHP 8.3 + Swoole + Redis extension) and starts **six containers**:
 
 | Container | Service | URL / Port |
 |-----------|---------|------------|
-| `fabriq-app` | Fabriq HTTP + WS server | [http://localhost:8000](http://localhost:8000) |
-| `fabriq-processor` | Queue/event processor | *(background process)* |
-| `fabriq-scheduler` | Cron-like job scheduler | *(background process)* |
-| `fabriq-mysql` | MySQL 8.0 | `localhost:3306` |
-| `fabriq-redis` | Redis 7 | `localhost:6379` |
-| `fabriq-adminer` | Adminer (DB GUI) | [http://localhost:8080](http://localhost:8080) |
+| `{project}-app-1` | Fabriq HTTP + WS server | [http://localhost:8000](http://localhost:8000) |
+| `{project}-processor-1` | Queue/event processor | *(background process)* |
+| `{project}-scheduler-1` | Cron-like job scheduler | *(background process)* |
+| `{project}-mysql-1` | MySQL 8.0 | `localhost:3306` |
+| `{project}-redis-1` | Redis 7 | `localhost:6379` |
+| `{project}-adminer-1` | Adminer (DB GUI) | [http://localhost:8080](http://localhost:8080) |
+
+> **Multiple projects:** To run multiple Fabriq-based projects side by side, give each a unique `COMPOSE_PROJECT_NAME` and different ports in `infra/.env`. Docker Compose auto-namespaces containers, volumes, and networks — no conflicts.
 
 All application containers (app, processor, scheduler) start automatically. The processor and scheduler have `restart: unless-stopped` for crash recovery. Wait for MySQL to pass its health check (~15–30 seconds) before the services connect.
 

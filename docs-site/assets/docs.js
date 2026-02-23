@@ -161,6 +161,7 @@
         { title: 'Production Deployment', section: 'Advanced', href: 'deployment.html' },
         { title: 'Process Types', section: 'Deployment', href: 'deployment.html#process-types' },
         { title: 'Production Dockerfile', section: 'Deployment', href: 'deployment.html#production-dockerfile' },
+        { title: 'Development Docker Compose', section: 'Deployment', href: 'deployment.html#dev-compose' },
         { title: 'Environment Configuration', section: 'Deployment', href: 'deployment.html#environment-config' },
         { title: 'Production Docker Compose', section: 'Deployment', href: 'deployment.html#docker-compose' },
         { title: 'Reverse Proxy & TLS', section: 'Deployment', href: 'deployment.html#reverse-proxy' },
