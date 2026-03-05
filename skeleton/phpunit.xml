@@ -12,22 +12,13 @@
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
         </testsuite>
-        <testsuite name="Integration">
-            <directory>tests/Integration</directory>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
     <source>
         <include>
-            <directory>packages</directory>
+            <directory>app</directory>
         </include>
-        <exclude>
-            <directory>packages/*/tests</directory>
-        </exclude>
     </source>
-    <coverage>
-        <report>
-            <clover outputFile="coverage.xml"/>
-            <text outputFile="php://stdout" showOnlySummary="true"/>
-        </report>
-    </coverage>
 </phpunit>

@@ -1,0 +1,112 @@
+name: ${COMPOSE_PROJECT_NAME}
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    ports:
+      - "${APP_PORT}:8000"
+    volumes:
+      - ..:/app
+      - vendor-data:/app/vendor
+    working_dir: /app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - SWOOLE_FABRIC_ENV=local
+    command: ["sh", "-c", "composer install --no-interaction --prefer-dist && php bin/fabriq serve"]
+    networks:
+      - app-net
+
+  processor:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    volumes:
+      - ..:/app
+      - vendor-data:/app/vendor
+    working_dir: /app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - SWOOLE_FABRIC_ENV=local
+    command: ["sh", "-c", "composer install --no-interaction --prefer-dist && php bin/fabriq processor"]
+    restart: unless-stopped
+    networks:
+      - app-net
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    volumes:
+      - ..:/app
+      - vendor-data:/app/vendor
+    working_dir: /app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - SWOOLE_FABRIC_ENV=local
+    command: ["sh", "-c", "composer install --no-interaction --prefer-dist && php bin/fabriq scheduler"]
+    restart: unless-stopped
+    networks:
+      - app-net
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "${MYSQL_PORT}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_USER: fabriq
+      MYSQL_PASSWORD: sfpass
+      MYSQL_DATABASE: sf_platform
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-net
+
+  adminer:
+    image: adminer
+    ports:
+      - "${ADMINER_PORT}:8080"
+    depends_on:
+      - mysql
+    networks:
+      - app-net
+
+volumes:
+  mysql-data:
+  vendor-data:
+
+networks:
+  app-net:
+    driver: bridge

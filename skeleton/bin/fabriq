@@ -8,9 +8,6 @@ declare(strict_types=1);
  * Usage:
  *   php bin/fabriq <command> [arguments] [options]
  *   php bin/fabriq help
- *
- * All commands are registered via the console Kernel.
- * Application is bootstrapped for commands that need it (e.g. serve).
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
@@ -30,11 +27,7 @@ use Fabriq\Kernel\Console\Commands\MakeMiddlewareCommand;
 use Fabriq\Kernel\Console\Commands\MakeMigrationCommand;
 use Fabriq\Kernel\Console\Commands\MigrateCommand;
 use Fabriq\Kernel\Console\Commands\MigrateRollbackCommand;
-use Fabriq\Kernel\Console\Commands\SeedCommand;
-use Fabriq\Kernel\Console\Commands\MakeSeederCommand;
-use Fabriq\Kernel\Console\Commands\MakeFactoryCommand;
 
-// Bootstrap application for commands that need it
 $commandName = $argv[1] ?? 'help';
 $needsApp = in_array($commandName, ['serve'], true);
 
@@ -44,31 +37,20 @@ if ($needsApp) {
     $app = require __DIR__ . '/../bootstrap/app.php';
 }
 
-// Build command registry
 $registry = new CommandRegistry();
 
-// Runtime commands
 $registry->register(new ServeCommand());
 $registry->register(new ProcessorCommand());
 $registry->register(new SchedulerCommand());
-
-// Frontend commands
 $registry->register(new FrontendBuildCommand());
 $registry->register(new FrontendStatusCommand());
-
-// Code generators
 $registry->register(new MakeControllerCommand());
 $registry->register(new MakeModelCommand());
 $registry->register(new MakeProviderCommand());
 $registry->register(new MakeMiddlewareCommand());
 $registry->register(new MakeMigrationCommand());
-
-// Database commands
 $registry->register(new MigrateCommand());
 $registry->register(new MigrateRollbackCommand());
-$registry->register(new SeedCommand());
-$registry->register(new MakeSeederCommand());
-$registry->register(new MakeFactoryCommand());
 
 $kernel = new Kernel($registry, $app);
 $exitCode = $kernel->run($argv);

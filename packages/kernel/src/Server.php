@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Fabriq\Kernel;
 
+use Fabriq\Http\ErrorHandler;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 use Swoole\WebSocket\Frame;
@@ -43,12 +44,15 @@ final class Server
     private array $workerStartCallbacks = [];
 
     private ?Container $container = null;
+    private ?EventDispatcher $events;
+    private ?ErrorHandler $errorHandler = null;
 
     /** @var bool Whether UDP listener has been added */
     private bool $udpEnabled = false;
 
-    public function __construct(Config $config)
+    public function __construct(Config $config, ?EventDispatcher $events = null)
     {
+        $this->events = $events;
         $this->config = $config;
 
         $host = $config->get('server.host', '0.0.0.0');
@@ -131,6 +135,11 @@ final class Server
     public function setContainer(Container $container): void
     {
         $this->container = $container;
+    }
+
+    public function setErrorHandler(ErrorHandler $handler): void
+    {
+        $this->errorHandler = $handler;
     }
 
     public function getSwoole(): WsServer
@@ -241,12 +250,13 @@ final class Server
                 ? 'worker' : 'task_worker';
             echo "[Fabriq] {$type} #{$workerId} started\n";
 
-            // Re-build per-worker container
             if ($this->container) {
                 foreach ($this->workerStartCallbacks as $cb) {
                     $cb($this->container);
                 }
             }
+
+            $this->events?->dispatch('worker.started', [$workerId, $type]);
         });
 
         $this->swoole->on('Request', function (Request $request, Response $response) {
@@ -257,12 +267,18 @@ final class Server
                 ($this->requestHandler)($request, $response);
             }
             catch (\Throwable $e) {
-                $response->status(500);
-                $response->header('Content-Type', 'application/json');
-                $response->end(json_encode([
-                    'error' => 'Internal Server Error',
-                    'message' => $e->getMessage(),
-                ], JSON_THROW_ON_ERROR));
+                $this->events?->dispatch('request.error', [$e, $request, $response]);
+
+                if ($this->errorHandler) {
+                    $this->errorHandler->handle($e, $request, $response);
+                } else {
+                    $response->status(500);
+                    $response->header('Content-Type', 'application/json');
+                    $response->end(json_encode([
+                        'error' => 'Internal Server Error',
+                        'message' => $e->getMessage(),
+                    ], JSON_THROW_ON_ERROR));
+                }
             }
         });
 

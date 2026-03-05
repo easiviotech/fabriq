@@ -1,0 +1,577 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Method Fabriq\\Events\\EventConsumer\:\:processEvent\(\) has parameter \$fields with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/events/src/EventConsumer.php
+
+		-
+			message: '#^Method Fabriq\\Events\\EventSchema\:\:fromStreamFields\(\) has parameter \$fields with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/events/src/EventSchema.php
+
+		-
+			message: '#^Method Fabriq\\Gaming\\GameLoop\:\:__construct\(\) has parameter \$tickRates with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/gaming/src/GameLoop.php
+
+		-
+			message: '#^Method Fabriq\\Gaming\\GameLoop\:\:broadcastState\(\) has parameter \$deltas with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/gaming/src/GameLoop.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<int\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: packages/gaming/src/GameRoom.php
+
+		-
+			message: '#^Method Fabriq\\Gaming\\GameRoomManager\:\:joinRoom\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/gaming/src/GameRoomManager.php
+
+		-
+			message: '#^Property Fabriq\\Gaming\\GameRoomManager\:\:\$config is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/gaming/src/GameRoomManager.php
+
+		-
+			message: '#^Method Fabriq\\Gaming\\LobbyManager\:\:broadcastToRoom\(\) has parameter \$message with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/gaming/src/LobbyManager.php
+
+		-
+			message: '#^Property Fabriq\\Gaming\\LobbyManager\:\:\$protocol is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/gaming/src/LobbyManager.php
+
+		-
+			message: '#^Property Fabriq\\Gaming\\LobbyManager\:\:\$roomManager is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/gaming/src/LobbyManager.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between array\{room\: Fabriq\\Gaming\\GameRoom, countdown_timer\: int\|null, countdown_seconds\: int, started\: bool\} and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 3
+			path: packages/gaming/src/LobbyManager.php
+
+		-
+			message: '#^Property Fabriq\\Gaming\\Matchmaker\:\:\$config is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/gaming/src/Matchmaker.php
+
+		-
+			message: '#^Method Fabriq\\Gaming\\PlayerSession\:\:connect\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/gaming/src/PlayerSession.php
+
+		-
+			message: '#^Method Fabriq\\Gaming\\PlayerSession\:\:loadFromRedis\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/gaming/src/PlayerSession.php
+
+		-
+			message: '#^Offset ''data'' on array\{player_id\: string, tenant_id\: string, user_id\: string, room_id\: string\|null, fd\: int, connected\: bool, disconnected_at\: int\|null, data\: array\<string, mixed\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: packages/gaming/src/PlayerSession.php
+
+		-
+			message: '#^Property Fabriq\\Gaming\\PlayerSession\:\:\$windowSeconds is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/gaming/src/PlayerSession.php
+
+		-
+			message: '#^Call to static method pack\(\) on an unknown class MessagePack\\MessagePack\.$#'
+			identifier: class.notFound
+			count: 1
+			path: packages/gaming/src/UdpProtocol.php
+
+		-
+			message: '#^Call to static method unpack\(\) on an unknown class MessagePack\\MessagePack\.$#'
+			identifier: class.notFound
+			count: 1
+			path: packages/gaming/src/UdpProtocol.php
+
+		-
+			message: '#^Method Fabriq\\Gaming\\UdpProtocol\:\:playerInput\(\) has parameter \$input with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/gaming/src/UdpProtocol.php
+
+		-
+			message: '#^Method Fabriq\\Gaming\\UdpProtocol\:\:roomEvent\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/gaming/src/UdpProtocol.php
+
+		-
+			message: '#^Method Fabriq\\Gaming\\UdpProtocol\:\:stateUpdate\(\) has parameter \$state with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/gaming/src/UdpProtocol.php
+
+		-
+			message: '#^Offset ''type'' on non\-empty\-array on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: packages/gaming/src/UdpProtocol.php
+
+		-
+			message: '#^Offset ''tenant_slug'' on array\{tenant_slug\: string, triggered_by\?\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: packages/http/src/Frontend/BuildFrontendJob.php
+
+		-
+			message: '#^Method Fabriq\\Http\\Frontend\\BuildResult\:\:toArray\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/http/src/Frontend/BuildResult.php
+
+		-
+			message: '#^Offset ''id'' on array\{id\: string, tenant_id\: string, scopes\: list\<string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: packages/http/src/Middleware/AuthMiddleware.php
+
+		-
+			message: '#^Offset ''scopes'' on array\{id\: string, tenant_id\: string, scopes\: list\<string\>\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: packages/http/src/Middleware/AuthMiddleware.php
+
+		-
+			message: '#^Offset ''tenant_id'' on array\{id\: string, tenant_id\: string, scopes\: list\<string\>\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: packages/http/src/Middleware/AuthMiddleware.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between non\-falsy\-string and '''' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: packages/http/src/Middleware/StaticFileMiddleware.php
+
+		-
+			message: '#^Offset ''method'' does not exist on array\{pattern\: string, handler\: callable\(\)\: mixed, params\: list\<string\>\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: packages/http/src/Router.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: packages/kernel/src/Config.php
+
+		-
+			message: '#^Method Fabriq\\Observability\\Logger\:\:debug\(\) has parameter \$extra with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/observability/src/Logger.php
+
+		-
+			message: '#^Method Fabriq\\Observability\\Logger\:\:error\(\) has parameter \$extra with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/observability/src/Logger.php
+
+		-
+			message: '#^Method Fabriq\\Observability\\Logger\:\:exception\(\) has parameter \$extra with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/observability/src/Logger.php
+
+		-
+			message: '#^Method Fabriq\\Observability\\Logger\:\:info\(\) has parameter \$extra with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/observability/src/Logger.php
+
+		-
+			message: '#^Method Fabriq\\Observability\\Logger\:\:warning\(\) has parameter \$extra with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/observability/src/Logger.php
+
+		-
+			message: '#^Method Fabriq\\Observability\\MetricsCollector\:\:percentile\(\) has parameter \$sorted with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/observability/src/MetricsCollector.php
+
+		-
+			message: '#^Call to function method_exists\(\) with object&T and ''toArray'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: packages/orm/src/Collection.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\Collection\:\:each\(\) return type with generic class Fabriq\\Orm\\Collection does not specify its types\: T$#'
+			identifier: missingType.generics
+			count: 1
+			path: packages/orm/src/Collection.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<T\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: packages/orm/src/Collection.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(Fabriq\\Orm\\Model\) and ''casts'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(Fabriq\\Orm\\Model\) and ''fillable'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(Fabriq\\Orm\\Model\) and ''guarded'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(Fabriq\\Orm\\Model\) and ''tenantScoped'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Call to function property_exists\(\) with \$this\(Fabriq\\Orm\\Model\) and ''timestamps'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\Model\:\:__construct\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\Model\:\:all\(\) should return Fabriq\\Orm\\Collection\<static\(Fabriq\\Orm\\Model\)\> but returns Fabriq\\Orm\\Collection\<array\<string, mixed\>\>\|Fabriq\\Orm\\Collection\<Fabriq\\Orm\\Model\>\.$#'
+			identifier: return.type
+			count: 1
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\Model\:\:find\(\) should return static\(Fabriq\\Orm\\Model\)\|null but returns array\<string, mixed\>\|Fabriq\\Orm\\Model\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Parameter \#1 \$models of method Fabriq\\Orm\\Relations\\Relation\:\:eagerLoad\(\) expects Fabriq\\Orm\\Collection\<Fabriq\\Orm\\Model\>, Fabriq\\Orm\\Collection\<static\(Fabriq\\Orm\\Model\)\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Property Fabriq\\Orm\\Model\:\:\$relations with generic class Fabriq\\Orm\\Collection does not specify its types\: T$#'
+			identifier: missingType.generics
+			count: 1
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Unsafe usage of new static\(\)\.$#'
+			identifier: new.static
+			count: 4
+			path: packages/orm/src/Model.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\Paginator\:\:__construct\(\) has parameter \$items with generic class Fabriq\\Orm\\Collection but does not specify its types\: T$#'
+			identifier: missingType.generics
+			count: 1
+			path: packages/orm/src/Paginator.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\QueryBuilder\:\:whereIn\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/orm/src/QueryBuilder.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\QueryBuilder\:\:whereNotIn\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/orm/src/QueryBuilder.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\QueryBuilder\:\:whereRaw\(\) has parameter \$bindings with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/orm/src/QueryBuilder.php
+
+		-
+			message: '#^PHPDoc tag @param for parameter \$columns with type list\<string\>\|string is not subtype of native type string\.$#'
+			identifier: parameter.phpDocType
+			count: 1
+			path: packages/orm/src/QueryBuilder.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\Schema\\Blueprint\:\:columnToSql\(\) has parameter \$col with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/orm/src/Schema/Blueprint.php
+
+		-
+			message: '#^Property Fabriq\\Orm\\Schema\\Blueprint\:\:\$isCreate is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/orm/src/Schema/Blueprint.php
+
+		-
+			message: '#^Method Fabriq\\Orm\\Schema\\MigrationRunner\:\:findMigrationFile\(\) has parameter \$files with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/orm/src/Schema/MigrationRunner.php
+
+		-
+			message: '#^Method Fabriq\\Queue\\Consumer\:\:__construct\(\) has parameter \$backoff with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/Consumer.php
+
+		-
+			message: '#^Method Fabriq\\Queue\\Consumer\:\:moveToDlq\(\) has parameter \$fields with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/Consumer.php
+
+		-
+			message: '#^Method Fabriq\\Queue\\Consumer\:\:processMessage\(\) has parameter \$fields with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/Consumer.php
+
+		-
+			message: '#^Method Fabriq\\Queue\\Consumer\:\:redispatch\(\) has parameter \$fields with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/Consumer.php
+
+		-
+			message: '#^Method Fabriq\\Queue\\Consumer\:\:registerHandler\(\) has parameter \$handler with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/Consumer.php
+
+		-
+			message: '#^Parameter \#1 \$array is passed by reference so it does not accept readonly property Fabriq\\Queue\\Consumer\:\:\$backoff\.$#'
+			identifier: argument.byRef
+			count: 1
+			path: packages/queue/src/Consumer.php
+
+		-
+			message: '#^Property Fabriq\\Queue\\Consumer\:\:\$handlers type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/Consumer.php
+
+		-
+			message: '#^Method Fabriq\\Queue\\Dispatcher\:\:buildMessage\(\) has parameter \$payload with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/Dispatcher.php
+
+		-
+			message: '#^Method Fabriq\\Queue\\IdempotencyStore\:\:checkDb\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/IdempotencyStore.php
+
+		-
+			message: '#^Method Fabriq\\Queue\\IdempotencyStore\:\:storeDb\(\) has parameter \$result with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/IdempotencyStore.php
+
+		-
+			message: '#^Template type T of method Fabriq\\Queue\\IdempotencyStore\:\:once\(\) is not referenced in a parameter\.$#'
+			identifier: method.templateTypeNotInParameter
+			count: 1
+			path: packages/queue/src/IdempotencyStore.php
+
+		-
+			message: '#^Property Fabriq\\Queue\\Scheduler\:\:\$schedules type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/queue/src/Scheduler.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 1
+			path: packages/queue/src/Scheduler.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between ''0'' and ''0'' will always evaluate to false\.$#'
+			identifier: notIdentical.alwaysFalse
+			count: 1
+			path: packages/queue/src/Scheduler.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between \*NEVER\* and 0 will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: packages/queue/src/Scheduler.php
+
+		-
+			message: '#^Property Fabriq\\Realtime\\RealtimeSubscriber\:\:\$db is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/realtime/src/RealtimeSubscriber.php
+
+		-
+			message: '#^Property Fabriq\\Realtime\\WsAuthHandler\:\:\$tenantResolver is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/realtime/src/WsAuthHandler.php
+
+		-
+			message: '#^Method Fabriq\\Security\\ApiKeyAuthenticator\:\:__construct\(\) has parameter \$lookupByPrefix with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/security/src/ApiKeyAuthenticator.php
+
+		-
+			message: '#^Property Fabriq\\Security\\ApiKeyAuthenticator\:\:\$lookupByPrefix type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/security/src/ApiKeyAuthenticator.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: packages/security/src/ApiKeyAuthenticator.php
+
+		-
+			message: '#^Method Fabriq\\Security\\PolicyEngine\:\:addCondition\(\) has parameter \$condition with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/security/src/PolicyEngine.php
+
+		-
+			message: '#^Method Fabriq\\Security\\PolicyEngine\:\:evaluate\(\) has parameter \$context with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/security/src/PolicyEngine.php
+
+		-
+			message: '#^Method Fabriq\\Security\\PolicyEngine\:\:setAuditLogger\(\) has parameter \$logger with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/security/src/PolicyEngine.php
+
+		-
+			message: '#^Property Fabriq\\Security\\PolicyEngine\:\:\$abacRules type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/security/src/PolicyEngine.php
+
+		-
+			message: '#^Property Fabriq\\Security\\PolicyEngine\:\:\$auditLogger type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/security/src/PolicyEngine.php
+
+		-
+			message: '#^Property Fabriq\\Storage\\MysqlConnectionFactory\:\:\$config on left side of \?\? is not nullable nor uninitialized\.$#'
+			identifier: nullCoalesce.initializedProperty
+			count: 5
+			path: packages/storage/src/MysqlConnectionFactory.php
+
+		-
+			message: '#^Property Fabriq\\Storage\\RedisConnectionFactory\:\:\$config on left side of \?\? is not nullable nor uninitialized\.$#'
+			identifier: nullCoalesce.initializedProperty
+			count: 2
+			path: packages/storage/src/RedisConnectionFactory.php
+
+		-
+			message: '#^Property Fabriq\\Streaming\\ChatModerator\:\:\$config is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/streaming/src/ChatModerator.php
+
+		-
+			message: '#^Property Fabriq\\Streaming\\HlsManager\:\:\$config is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/streaming/src/HlsManager.php
+
+		-
+			message: '#^Method Fabriq\\Streaming\\SignalingHandler\:\:handleAnswer\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/streaming/src/SignalingHandler.php
+
+		-
+			message: '#^Method Fabriq\\Streaming\\SignalingHandler\:\:handleCandidate\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/streaming/src/SignalingHandler.php
+
+		-
+			message: '#^Method Fabriq\\Streaming\\SignalingHandler\:\:handleOffer\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/streaming/src/SignalingHandler.php
+
+		-
+			message: '#^Method Fabriq\\Streaming\\SignalingHandler\:\:handleSubscribe\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/streaming/src/SignalingHandler.php
+
+		-
+			message: '#^Method Fabriq\\Streaming\\SignalingHandler\:\:notifyViewers\(\) has parameter \$message with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: packages/streaming/src/SignalingHandler.php
+
+		-
+			message: '#^Property Fabriq\\Streaming\\SignalingHandler\:\:\$db is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/streaming/src/SignalingHandler.php
+
+		-
+			message: '#^Property Fabriq\\Streaming\\StreamManager\:\:\$config is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/streaming/src/StreamManager.php
+
+		-
+			message: '#^Offset ''metadata'' on array\{stream_id\: string, tenant_id\: string, user_id\: string, title\: string, status\: string, started_at\: int\|null, ended_at\: int\|null, metadata\: array\<string, mixed\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: packages/streaming/src/StreamRepository.php
+
+		-
+			message: '#^Property Fabriq\\Streaming\\TranscodingPipeline\:\:\$config is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: packages/streaming/src/TranscodingPipeline.php

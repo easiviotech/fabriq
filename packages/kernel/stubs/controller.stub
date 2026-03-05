@@ -1,0 +1,17 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Swoole\Http\Request;
+use Swoole\Http\Response;
+
+final class {{ class }}
+{
+    public function index(Request $request, Response $response): void
+    {
+        $response->header('Content-Type', 'application/json');
+        $response->end(json_encode(['message' => 'Hello from {{ class }}']));
+    }
+}

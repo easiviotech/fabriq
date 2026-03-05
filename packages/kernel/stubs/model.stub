@@ -1,0 +1,24 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Fabriq\Orm\Model;
+
+final class {{ class }} extends Model
+{
+    protected string $table = '';
+
+    protected string $primaryKey = 'id';
+
+    protected bool $tenantScoped = true;
+
+    protected bool $timestamps = true;
+
+    /** @var list<string> */
+    protected array $fillable = [];
+
+    /** @var array<string, string> */
+    protected array $casts = [];
+}

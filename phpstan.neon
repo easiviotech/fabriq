@@ -1,0 +1,19 @@
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 6
+    paths:
+        - packages
+    excludePaths:
+        - packages/*/tests
+    ignoreErrors:
+        - '#Parameter .* of class Swoole\\#'
+        - '#Class Swoole\\.* not found#'
+        - '#Constant SWOOLE_.* not found#'
+        - '#Constant WEBSOCKET_.* not found#'
+        - '#Function Swoole\\Coroutine\\run not found#'
+        - '#Unsafe usage of new static#'
+        - '#While loop condition is always true#'
+        - '#Unreachable statement - code above always terminates#'
+    reportUnmatchedIgnoredErrors: false

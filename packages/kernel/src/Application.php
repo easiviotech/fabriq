@@ -9,6 +9,7 @@ use Swoole\Http\Response;
 use Fabriq\Observability\MetricsCollector;
 use Fabriq\Observability\Logger;
 use Fabriq\Storage\DbManager;
+use Fabriq\Http\ErrorHandler;
 use Fabriq\Http\Middleware\StaticFileMiddleware;
 use Fabriq\Http\Frontend\FrontendBuilder;
 
@@ -30,6 +31,7 @@ final class Application
     private string $basePath;
     private Config $config;
     private Container $container;
+    private EventDispatcher $events;
     private Server $server;
 
     /** @var list<ServiceProvider> */
@@ -59,13 +61,15 @@ final class Application
         }
 
         $this->container = new Container();
-        $this->server = new Server($this->config);
+        $this->events = new EventDispatcher();
+        $this->server = new Server($this->config, $this->events);
 
         // Register core instances
         $this->container->instance(self::class, $this);
         $this->container->instance(Config::class, $this->config);
         $this->container->instance(Container::class, $this->container);
         $this->container->instance(Server::class, $this->server);
+        $this->container->instance(EventDispatcher::class, $this->events);
 
         // Register observability services
         $metrics = new MetricsCollector();
@@ -75,6 +79,12 @@ final class Application
         $logLevel = $this->config->get('observability.log_level', 'info');
         $logger = new Logger(is_string($logLevel) ? $logLevel : 'info');
         $this->container->instance(Logger::class, $logger);
+
+        // Register error handler
+        $debug = (bool) $this->config->get('app.debug', false);
+        $errorHandler = new ErrorHandler($debug);
+        $this->container->instance(ErrorHandler::class, $errorHandler);
+        $this->server->setErrorHandler($errorHandler);
 
         // Register DbManager
         $dbManager = new DbManager();
@@ -175,6 +185,11 @@ final class Application
         return $this->container;
     }
 
+    public function events(): EventDispatcher
+    {
+        return $this->events;
+    }
+
     public function server(): Server
     {
         return $this->server;
@@ -223,6 +238,7 @@ final class Application
         }
 
         $this->booted = true;
+        $this->events->dispatch('server.booted', [$this]);
     }
 
     /**
@@ -395,14 +411,18 @@ final class Application
 
     private function wireRequestHandler(MetricsCollector $metrics): void
     {
-        $this->server->onRequest(function (Request $request, Response $response) use ($metrics) {
+        $events = $this->events;
+
+        $this->server->onRequest(function (Request $request, Response $response) use ($metrics, $events) {
             $startTime = microtime(true);
             $metrics->increment('http_requests_total');
+            $events->dispatch('request.received', [$request, $response]);
 
             foreach ($this->routes as $handler) {
                 if ($handler($request, $response)) {
                     $latencyMs = (microtime(true) - $startTime) * 1000;
                     $metrics->observe('http_latency_ms', $latencyMs);
+                    $events->dispatch('request.handled', [$request, $response, $latencyMs]);
                     return;
                 }
             }
@@ -417,6 +437,7 @@ final class Application
 
             $latencyMs = (microtime(true) - $startTime) * 1000;
             $metrics->observe('http_latency_ms', $latencyMs);
+            $events->dispatch('request.handled', [$request, $response, $latencyMs]);
         });
     }
 }

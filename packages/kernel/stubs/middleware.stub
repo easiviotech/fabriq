@@ -1,0 +1,20 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Fabriq\Http\Request;
+use Fabriq\Http\Response;
+
+final class {{ class }}
+{
+    public function __invoke(Request $request, Response $response, callable $next): void
+    {
+        // Before request...
+
+        $next($request, $response);
+
+        // After request...
+    }
+}

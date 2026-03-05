@@ -1,0 +1,19 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Database\Factories;
+
+use Fabriq\Orm\Factory;
+
+final class {{ class }} extends Factory
+{
+    // protected string $model = \App\Models\YourModel::class;
+
+    public function definition(): array
+    {
+        return [
+            //
+        ];
+    }
+}
