@@ -351,11 +351,9 @@ composer require fabriq/tenancy
 > **Note:** Swoole does not run natively on Windows. Docker is the recommended (and required on Windows) way to run Fabriq.
 
 ```bash
-# Clone the project
-git clone <repo-url> myapp && cd myapp
-
-# (Optional) Install Composer dependencies locally for IDE autocompletion:
-composer install --ignore-platform-reqs
+# Create a new project from the skeleton
+composer create-project easiviotech/fabriq-skeleton myapp
+cd myapp
 
 # Start the full stack (app + MySQL + Redis + Adminer)
 docker compose -f infra/docker-compose.yml up -d --build

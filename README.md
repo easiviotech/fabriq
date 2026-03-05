@@ -110,25 +110,16 @@ These packages are **disabled by default** and installed separately. Enable them
 
 > **Note:** Swoole does not run natively on Windows. Docker is the recommended way to run Fabriq on all platforms.
 
-### 1. Clone the project
+### 1. Create a new project
 
 ```bash
-git clone <repo-url> myapp
+composer create-project easiviotech/fabriq-skeleton myapp
 cd myapp
 ```
 
-### 2. Install Composer dependencies
+> Or clone the skeleton directly: `git clone https://github.com/easiviotech/fabriq-skeleton myapp && cd myapp`
 
-```bash
-# If you have PHP locally (any platform):
-composer install --ignore-platform-reqs
-
-# Or skip this — Docker will install dependencies during the build.
-```
-
-### 3. Start the full stack
-
-From the **project root**, run:
+### 2. Start the full stack
 
 ```bash
 docker compose -f infra/docker-compose.yml up -d --build
