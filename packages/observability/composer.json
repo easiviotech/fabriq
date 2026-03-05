@@ -2,7 +2,7 @@
     "name": "fabriq/observability",
     "description": "Fabriq Observability — Structured logging, distributed tracing, and metrics collection.",
     "type": "library",
-    "license": "proprietary",
+    "license": "MIT",
     "minimum-stability": "stable",
     "prefer-stable": true,
     "require": {

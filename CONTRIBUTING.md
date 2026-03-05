@@ -15,7 +15,7 @@ Thank you for considering contributing to Fabriq! This guide will help you get s
 ### Getting Started
 
 ```bash
-git clone https://github.com/fabrq/fabriq.git
+git clone https://github.com/easiviotech/fabriq.git
 cd fabriq
 composer install
 ```

@@ -1,5 +1,5 @@
 {
-    "name": "fabrq/fabriq",
+    "name": "easiviotech/fabriq",
     "description": "Fabriq — Unified Swoole-powered application platform. Serves HTTP APIs, WebSocket realtime, per-tenant frontend builds, background jobs, and event bus — with optional add-ons for live streaming and game server.",
     "type": "project",
     "license": "MIT",

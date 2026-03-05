@@ -2,7 +2,7 @@
     "name": "fabriq/kernel",
     "description": "Fabriq Kernel — Core container, config, context, server, and service-provider abstractions powered by Swoole.",
     "type": "library",
-    "license": "proprietary",
+    "license": "MIT",
     "minimum-stability": "stable",
     "prefer-stable": true,
     "require": {
