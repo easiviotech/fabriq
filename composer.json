@@ -49,8 +49,10 @@
         }
     },
     "scripts": {
-        "test": "phpunit",
-        "analyse": "phpstan analyse"
+        "test": "phpunit --no-coverage",
+        "test:coverage": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=512M",
+        "analyze": "@analyse"
     },
     "config": {
         "sort-packages": true
