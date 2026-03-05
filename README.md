@@ -112,12 +112,21 @@ These packages are **disabled by default** and installed separately. Enable them
 
 ### 1. Create a new project
 
+**Linux / macOS:**
 ```bash
 composer create-project easiviotech/fabriq-skeleton myapp
 cd myapp
 ```
 
-> Or clone the skeleton directly: `git clone https://github.com/easiviotech/fabriq-skeleton myapp && cd myapp`
+**Windows:**
+```powershell
+composer create-project easiviotech/fabriq-skeleton myapp --ignore-platform-req=ext-swoole
+cd myapp
+```
+
+> Swoole runs inside Docker — `--ignore-platform-req=ext-swoole` is safe and expected on Windows/macOS.
+>
+> Or clone directly: `git clone https://github.com/easiviotech/fabriq-skeleton myapp && cd myapp`
 
 ### 2. Start the full stack
 
