@@ -14,12 +14,13 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - { local: 'kernel',        remote: 'fabriq-kernel' }
-          - { local: 'storage',       remote: 'fabriq-storage' }
-          - { local: 'observability', remote: 'fabriq-observability' }
-          - { local: 'tenancy',       remote: 'fabriq-tenancy' }
-          - { local: 'streaming',     remote: 'fabriq-streaming' }
-          - { local: 'gaming',        remote: 'fabriq-gaming' }
+          - { local: 'kernel',        remote: 'fabriq-kernel',        dir: 'packages/kernel' }
+          - { local: 'storage',       remote: 'fabriq-storage',       dir: 'packages/storage' }
+          - { local: 'observability', remote: 'fabriq-observability', dir: 'packages/observability' }
+          - { local: 'tenancy',       remote: 'fabriq-tenancy',       dir: 'packages/tenancy' }
+          - { local: 'streaming',     remote: 'fabriq-streaming',     dir: 'packages/streaming' }
+          - { local: 'gaming',        remote: 'fabriq-gaming',        dir: 'packages/gaming' }
+          - { local: 'skeleton',      remote: 'fabriq-skeleton',      dir: 'skeleton' }
 
     steps:
       - name: Checkout
@@ -38,7 +39,7 @@ jobs:
         env:
           SPLIT_TOKEN: ${{ secrets.SPLIT_TOKEN }}
         run: |
-          SHA=$(splitsh-lite --prefix=packages/${{ matrix.package.local }})
+          SHA=$(splitsh-lite --prefix=${{ matrix.package.dir }})
           git remote add ${{ matrix.package.remote }} \
             "https://x-access-token:${SPLIT_TOKEN}@github.com/easiviotech/${{ matrix.package.remote }}.git" 2>/dev/null || true
           git push ${{ matrix.package.remote }} ${SHA}:refs/heads/main -f
@@ -49,7 +50,7 @@ jobs:
           SPLIT_TOKEN: ${{ secrets.SPLIT_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
-          SHA=$(splitsh-lite --prefix=packages/${{ matrix.package.local }})
+          SHA=$(splitsh-lite --prefix=${{ matrix.package.dir }})
           git remote add ${{ matrix.package.remote }} \
             "https://x-access-token:${SPLIT_TOKEN}@github.com/easiviotech/${{ matrix.package.remote }}.git" 2>/dev/null || true
           git tag -f ${TAG} ${SHA}
