@@ -15,9 +15,13 @@ namespace Fabriq\Kernel;
  */
 abstract class ServiceProvider
 {
+    protected readonly Container $container;
+
     public function __construct(
         protected readonly Application $app,
-    ) {}
+    ) {
+        $this->container = $app->container();
+    }
 
     /**
      * Register bindings into the container.
