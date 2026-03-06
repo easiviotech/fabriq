@@ -4,12 +4,19 @@
 
 ## Create a New Project
 
+**Linux / macOS:**
 ```bash
 composer create-project easiviotech/fabriq-skeleton myapp
 cd myapp
 ```
 
-> **Windows users**: Swoole does not run natively on Windows. Use Docker — it works on all platforms.
+**Windows:**
+```powershell
+composer create-project easiviotech/fabriq-skeleton myapp --ignore-platform-req=ext-swoole
+cd myapp
+```
+
+> Swoole does not run natively on Windows or macOS. The `--ignore-platform-req=ext-swoole` flag skips the local Swoole check — Swoole runs inside Docker, so this is safe and expected.
 
 ## Start the Stack
 

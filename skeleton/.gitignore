@@ -7,8 +7,9 @@
 *.swo
 .DS_Store
 Thumbs.db
-.env
-.env.production
+/.env
+/.env.production
+!infra/.env
 /storage/builds/*/
 /public/*/
 !/public/_default/
