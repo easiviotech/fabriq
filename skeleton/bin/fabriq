@@ -27,6 +27,8 @@ use Fabriq\Kernel\Console\Commands\MakeMiddlewareCommand;
 use Fabriq\Kernel\Console\Commands\MakeMigrationCommand;
 use Fabriq\Kernel\Console\Commands\MigrateCommand;
 use Fabriq\Kernel\Console\Commands\MigrateRollbackCommand;
+use Fabriq\Kernel\Console\Commands\SeedCommand;
+use Fabriq\Kernel\Console\Commands\MakeSeederCommand;
 
 $commandName = $argv[1] ?? 'help';
 $needsApp = in_array($commandName, ['serve'], true);
@@ -51,6 +53,8 @@ $registry->register(new MakeMiddlewareCommand());
 $registry->register(new MakeMigrationCommand());
 $registry->register(new MigrateCommand());
 $registry->register(new MigrateRollbackCommand());
+$registry->register(new SeedCommand());
+$registry->register(new MakeSeederCommand());
 
 $kernel = new Kernel($registry, $app);
 $exitCode = $kernel->run($argv);

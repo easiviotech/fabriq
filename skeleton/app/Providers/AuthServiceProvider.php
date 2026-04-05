@@ -16,7 +16,7 @@ class AuthServiceProvider extends ServiceProvider
             return new JwtAuthenticator(
                 secret: (string) $config->get('auth.jwt.secret', ''),
                 algorithm: (string) $config->get('auth.jwt.algorithm', 'HS256'),
-                ttl: (int) $config->get('auth.jwt.ttl', 3600),
+                defaultTtl: (int) $config->get('auth.jwt.ttl', 3600),
             );
         });
     }
